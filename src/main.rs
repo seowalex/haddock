@@ -1,74 +1,23 @@
+mod commands;
+
 use anyhow::{bail, Context, Result};
-use clap::{crate_name, crate_version, Parser, Subcommand, ValueEnum};
+use clap::Parser;
 use docker_compose_types::{Compose, ComposeFile, TopLevelVolumes};
-use itertools::Itertools;
-use serde_json::json;
-use std::{collections::HashSet, fs};
+use std::fs;
 
 #[derive(Parser, Debug)]
 #[command(version, about)]
 struct Args {
     #[command(subcommand)]
-    command: Command,
+    command: commands::Command,
 
     /// Compose configuration files
     #[arg(short, long)]
     file: Option<Vec<String>>,
 }
 
-#[derive(Subcommand, Debug)]
-enum Command {
-    /// Converts the compose file to platform's canonical format
-    #[command(alias = "config")]
-    Convert {
-        /// Format the output
-        #[arg(long, value_enum, default_value_t = ConvertFormat::Yaml)]
-        format: ConvertFormat,
-        /// Only validate the configuration, don't print anything
-        #[arg(short, long)]
-        quiet: bool,
-        /// Print the service names, one per line
-        #[arg(long)]
-        services: bool,
-        /// Print the volume names, one per line
-        #[arg(long)]
-        volumes: bool,
-        /// Print the profile names, one per line
-        #[arg(long)]
-        profiles: bool,
-        /// Print the image names, one per line
-        #[arg(long)]
-        images: bool,
-        /// Save to file (default to stdout)
-        #[arg(short, long)]
-        output: Option<String>,
-    },
-    /// Print version information
-    Version {
-        /// Format the output
-        #[arg(short, long, value_enum, default_value_t = VersionFormat::Pretty)]
-        format: VersionFormat,
-        /// Show only the version number
-        #[arg(long)]
-        short: bool,
-    },
-}
-
-#[derive(ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
-enum ConvertFormat {
-    Yaml,
-    Json,
-}
-
-#[derive(ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
-enum VersionFormat {
-    Pretty,
-    Json,
-}
-
-fn main() -> Result<()> {
-    let args = Args::parse();
-    let contents = match args.file {
+fn parse_files(paths: Option<Vec<String>>) -> Result<Compose> {
+    let contents = match paths {
         Some(paths) => paths
             .into_iter()
             .map(|path| {
@@ -146,96 +95,14 @@ fn main() -> Result<()> {
         }
     }
 
-    match args.command {
-        Command::Convert {
-            format,
-            quiet,
-            services,
-            volumes,
-            profiles,
-            images,
-            output,
-        } => {
-            if services {
-                if let Some(services) = combined_file.services {
-                    for service in services.0 {
-                        println!("{}", service.0);
-                    }
-                }
-            } else if volumes {
-                match combined_file.volumes {
-                    Some(TopLevelVolumes::CV(volumes)) => {
-                        for volume in &volumes.0 {
-                            println!("{}", volume.0);
-                        }
-                    }
-                    Some(TopLevelVolumes::Labelled(volumes)) => {
-                        for volume in &volumes.0 {
-                            println!("{}", volume.0);
-                        }
-                    }
-                    None => {}
-                }
-            } else if profiles {
-                if let Some(services) = combined_file.services {
-                    let mut all_profiles = HashSet::new();
+    Ok(combined_file)
+}
 
-                    for service in services.0 {
-                        if let Some(profiles) = service.1.and_then(|service| service.profiles) {
-                            all_profiles.extend(profiles);
-                        }
-                    }
+fn main() -> Result<()> {
+    let args = Args::parse();
+    let file = parse_files(args.file)?;
 
-                    for profile in all_profiles.into_iter().sorted() {
-                        println!("{profile}");
-                    }
-                }
-            } else if images {
-                if let Some(services) = combined_file.services {
-                    for service in services.0 {
-                        if let Some(image) = service.1.and_then(|service| service.image) {
-                            println!("{image}");
-                        }
-                    }
-                }
-            } else {
-                match format {
-                    ConvertFormat::Yaml => {
-                        let contents = serde_yaml::to_string(&combined_file)?;
-
-                        if !quiet && output.is_none() {
-                            print!("{contents}");
-                        }
-
-                        if let Some(path) = output {
-                            fs::write(path, contents)?;
-                        }
-                    }
-                    ConvertFormat::Json => {
-                        let contents = serde_json::to_string_pretty(&combined_file)?;
-
-                        if !quiet && output.is_none() {
-                            print!("{contents}");
-                        }
-
-                        if let Some(path) = output {
-                            fs::write(path, contents)?;
-                        }
-                    }
-                };
-            }
-        }
-        Command::Version { format, short } => {
-            if short {
-                println!(crate_version!());
-            } else {
-                match format {
-                    VersionFormat::Pretty => println!("{} {}", crate_name!(), crate_version!()),
-                    VersionFormat::Json => println!("{}", json!({ "version": crate_version!() })),
-                }
-            }
-        }
-    }
+    commands::run(args.command, file)?;
 
     Ok(())
 }
