@@ -39,6 +39,9 @@ enum Command {
         /// Print the image names, one per line
         #[arg(long)]
         images: bool,
+        /// Save to file (default to stdout)
+        #[arg(short, long)]
+        output: Option<String>,
     },
     /// Print version information
     Version {
@@ -151,6 +154,7 @@ fn main() -> Result<()> {
             volumes,
             profiles,
             images,
+            output,
         } => {
             if services {
                 if let Some(services) = combined_file.services {
@@ -197,13 +201,25 @@ fn main() -> Result<()> {
             } else {
                 match format {
                     ConvertFormat::Yaml => {
-                        if !quiet {
-                            print!("{}", serde_yaml::to_string(&combined_file)?);
+                        let contents = serde_yaml::to_string(&combined_file)?;
+
+                        if !quiet && output.is_none() {
+                            print!("{contents}");
+                        }
+
+                        if let Some(path) = output {
+                            fs::write(path, contents)?;
                         }
                     }
                     ConvertFormat::Json => {
-                        if !quiet {
-                            print!("{}", serde_json::to_string_pretty(&combined_file)?);
+                        let contents = serde_json::to_string_pretty(&combined_file)?;
+
+                        if !quiet && output.is_none() {
+                            print!("{contents}");
+                        }
+
+                        if let Some(path) = output {
+                            fs::write(path, contents)?;
                         }
                     }
                 };
