@@ -3,7 +3,6 @@ mod version;
 
 use anyhow::Result;
 use clap::Subcommand;
-use docker_compose_types::Compose;
 
 #[derive(Subcommand, Debug)]
 pub(crate) enum Command {
@@ -15,11 +14,11 @@ pub(crate) enum Command {
     Version(version::Args),
 }
 
-pub(crate) fn run(command: Command, file: Compose) -> Result<()> {
+pub(crate) fn run(command: Command, paths: Option<Vec<String>>) -> Result<()> {
     match command {
         Command::Up => todo!(),
         Command::Down => todo!(),
-        Command::Convert(args) => convert::run(args, file),
+        Command::Convert(args) => convert::run(args, paths),
         Command::Version(args) => version::run(args),
     }?;
 

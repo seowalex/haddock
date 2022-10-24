@@ -1,8 +1,10 @@
 use anyhow::Result;
 use clap::ValueEnum;
-use docker_compose_types::{Compose, TopLevelVolumes};
+use indexmap::IndexSet;
 use itertools::Itertools;
 use std::{collections::HashSet, fs};
+
+use crate::compose;
 
 /// Converts the compose file to platform's canonical format
 #[derive(clap::Args, Debug)]
@@ -37,48 +39,34 @@ enum Format {
     Json,
 }
 
-pub(crate) fn run(args: Args, file: Compose) -> Result<()> {
+pub(crate) fn run(args: Args, paths: Option<Vec<String>>) -> Result<()> {
+    let file = compose::parse(paths)?;
+
     if args.services {
-        if let Some(services) = file.services {
-            for service in services.0 {
-                println!("{}", service.0);
-            }
+        for (name, _) in file.services {
+            println!("{name}");
         }
     } else if args.volumes {
-        match file.volumes {
-            Some(TopLevelVolumes::CV(volumes)) => {
-                for volume in &volumes.0 {
-                    println!("{}", volume.0);
-                }
+        if let Some(volumes) = file.volumes {
+            for (name, _) in volumes {
+                println!("{name}");
             }
-            Some(TopLevelVolumes::Labelled(volumes)) => {
-                for volume in &volumes.0 {
-                    println!("{}", volume.0);
-                }
-            }
-            None => {}
         }
     } else if args.profiles {
-        if let Some(services) = file.services {
-            let mut all_profiles = HashSet::new();
+        let mut all_profiles = IndexSet::new();
 
-            for service in services.0 {
-                if let Some(profiles) = service.1.and_then(|service| service.profiles) {
-                    all_profiles.extend(profiles);
-                }
-            }
-
-            for profile in all_profiles.into_iter().sorted() {
-                println!("{profile}");
+        for (_, service) in file.services {
+            if let Some(profiles) = service.profiles {
+                all_profiles.extend(profiles);
             }
         }
+
+        for profile in all_profiles {
+            println!("{profile}");
+        }
     } else if args.images {
-        if let Some(services) = file.services {
-            for service in services.0 {
-                if let Some(image) = service.1.and_then(|service| service.image) {
-                    println!("{image}");
-                }
-            }
+        for (_, service) in file.services {
+            println!("{}", service.image);
         }
     } else {
         match args.format {
@@ -94,17 +82,18 @@ pub(crate) fn run(args: Args, file: Compose) -> Result<()> {
                 }
             }
             Format::Json => {
-                let contents = serde_json::to_string_pretty(&file)?;
+                let mut contents = serde_json::to_string_pretty(&file)?;
+                contents.push('\n');
 
                 if !args.quiet && args.output.is_none() {
-                    println!("{contents}");
+                    print!("{contents}");
                 }
 
                 if let Some(path) = args.output {
-                    fs::write(path, contents + "\n")?;
+                    fs::write(path, contents)?;
                 }
             }
-        };
+        }
     }
 
     Ok(())
