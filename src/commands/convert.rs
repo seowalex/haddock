@@ -1,11 +1,11 @@
 use anyhow::Result;
-use clap::{Args as ClapArgs, ValueEnum};
+use clap::ValueEnum;
 use docker_compose_types::{Compose, TopLevelVolumes};
 use itertools::Itertools;
 use std::{collections::HashSet, fs};
 
 /// Converts the compose file to platform's canonical format
-#[derive(ClapArgs, Debug)]
+#[derive(clap::Args, Debug)]
 #[command(alias = "config")]
 pub(crate) struct Args {
     /// Format the output
@@ -31,8 +31,8 @@ pub(crate) struct Args {
     output: Option<String>,
 }
 
-#[derive(ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Format {
+#[derive(ValueEnum, Clone, Copy, PartialEq, Eq, Debug)]
+enum Format {
     Yaml,
     Json,
 }

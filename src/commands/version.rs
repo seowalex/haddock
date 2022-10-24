@@ -1,9 +1,9 @@
 use anyhow::Result;
-use clap::{crate_name, crate_version, Args as ClapArgs, ValueEnum};
+use clap::{crate_name, crate_version, ValueEnum};
 use serde_json::json;
 
 /// Print version information
-#[derive(ClapArgs, Debug)]
+#[derive(clap::Args, Debug)]
 pub(crate) struct Args {
     /// Format the output
     #[arg(short, long, value_enum, default_value_t = Format::Pretty)]
@@ -13,8 +13,8 @@ pub(crate) struct Args {
     short: bool,
 }
 
-#[derive(ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Format {
+#[derive(ValueEnum, Clone, Copy, PartialEq, Eq, Debug)]
+enum Format {
     Pretty,
     Json,
 }
