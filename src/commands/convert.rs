@@ -1,8 +1,7 @@
 use anyhow::Result;
 use clap::ValueEnum;
 use indexmap::IndexSet;
-use itertools::Itertools;
-use std::{collections::HashSet, fs};
+use std::fs;
 
 use crate::compose;
 
@@ -43,19 +42,19 @@ pub(crate) fn run(args: Args, paths: Option<Vec<String>>) -> Result<()> {
     let file = compose::parse(paths)?;
 
     if args.services {
-        for (name, _) in file.services {
-            println!("{name}");
+        for service in file.services.into_keys() {
+            println!("{service}");
         }
     } else if args.volumes {
         if let Some(volumes) = file.volumes {
-            for (name, _) in volumes {
-                println!("{name}");
+            for volume in volumes.into_keys() {
+                println!("{volume}");
             }
         }
     } else if args.profiles {
         let mut all_profiles = IndexSet::new();
 
-        for (_, service) in file.services {
+        for service in file.services.into_values() {
             if let Some(profiles) = service.profiles {
                 all_profiles.extend(profiles);
             }
@@ -65,7 +64,7 @@ pub(crate) fn run(args: Args, paths: Option<Vec<String>>) -> Result<()> {
             println!("{profile}");
         }
     } else if args.images {
-        for (_, service) in file.services {
+        for service in file.services.into_values() {
             println!("{}", service.image);
         }
     } else {
