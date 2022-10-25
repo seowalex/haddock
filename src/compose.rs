@@ -35,6 +35,8 @@ pub(crate) struct Service {
     pub(crate) cgroup_parent: Option<String>,
     #[serde_as(as = "Option<PickFirst<(_, StringWithSeparator::<SpaceSeparator, String>)>>")]
     pub(crate) command: Option<Vec<String>>,
+    #[serde_as(as = "Option<Vec<PickFirst<(_, FileReferenceOrString)>>>")]
+    pub(crate) configs: Option<Vec<FileReference>>,
     pub(crate) container_name: Option<String>,
     pub(crate) cpuset: Option<String>,
     #[serde_as(as = "Option<PickFirst<(DurationMicroSeconds, DurationWithPrefix)>>")]
@@ -47,7 +49,7 @@ pub(crate) struct Service {
     pub(crate) cpu_rt_runtime: Option<Duration>,
     pub(crate) cpu_shares: Option<i64>,
     #[serde_as(as = "Option<PickFirst<(_, DependsOnVec)>>")]
-    pub(crate) depends_on: Option<IndexMap<String, DependsOn>>,
+    pub(crate) depends_on: Option<IndexMap<String, Dependency>>,
     pub(crate) device_cgroup_rules: Option<String>,
     pub(crate) devices: Option<String>,
     #[serde_as(as = "Option<OneOrMany<_>>")]
@@ -79,6 +81,8 @@ pub(crate) struct Service {
     #[serde_as(as = "Option<PickFirst<(_, DisplayFromStr)>>")]
     pub(crate) memswap_limit: Option<Byte>,
     pub(crate) mem_swappiness: Option<i64>,
+    #[serde_as(as = "Option<PickFirst<(_, NetworksVec)>>")]
+    pub(crate) networks: Option<IndexMap<String, Option<ServiceNetwork>>>,
     pub(crate) network_mode: Option<String>,
     pub(crate) oom_kill_disable: Option<bool>,
     pub(crate) oom_score_adj: Option<i64>,
@@ -91,18 +95,22 @@ pub(crate) struct Service {
     pub(crate) pull_policy: Option<String>,
     pub(crate) read_only: Option<bool>,
     pub(crate) restart: Option<String>,
+    pub(crate) runtime: Option<String>,
+    #[serde_as(as = "Option<Vec<PickFirst<(_, FileReferenceOrString)>>>")]
+    pub(crate) secrets: Option<Vec<FileReference>>,
     pub(crate) security_opt: Option<Vec<String>>,
     #[serde_as(as = "Option<PickFirst<(_, DisplayFromStr)>>")]
     pub(crate) shm_size: Option<Byte>,
     #[serde_as(as = "Option<DurationWithPrefix>")]
     pub(crate) stop_grace_period: Option<Duration>,
     pub(crate) stop_signal: Option<String>,
+    pub(crate) storage_opt: Option<IndexMap<String, String>>,
     #[serde_as(as = "Option<PickFirst<(_, SysctlsVec)>>")]
     pub(crate) sysctls: Option<IndexMap<String, String>>,
     #[serde_as(as = "Option<OneOrMany<_>>")]
     pub(crate) tmpfs: Option<Vec<String>>,
     pub(crate) tty: Option<bool>,
-    pub(crate) ulimits: Option<IndexMap<String, Ulimits>>,
+    pub(crate) ulimits: Option<IndexMap<String, Limit>>,
     pub(crate) user: Option<String>,
     pub(crate) userns_mode: Option<String>,
     pub(crate) volumes_from: Option<Vec<String>>,
@@ -134,6 +142,31 @@ pub(crate) struct ThrottleDevice {
     pub(crate) rate: Byte,
 }
 
+#[skip_serializing_none]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
+pub(crate) struct FileReference {
+    pub(crate) source: String,
+    pub(crate) target: Option<String>,
+    pub(crate) uid: Option<String>,
+    pub(crate) gid: Option<String>,
+    pub(crate) mode: Option<u32>,
+}
+
+serde_conv!(
+    FileReferenceOrString,
+    FileReference,
+    |file_reference: &FileReference| { file_reference.source.to_owned() },
+    |source: String| -> std::result::Result<_, Infallible> {
+        Ok(FileReference {
+            source,
+            target: None,
+            uid: None,
+            gid: None,
+            mode: None,
+        })
+    }
+);
+
 serde_conv!(
     DurationWithPrefix,
     Duration,
@@ -142,7 +175,7 @@ serde_conv!(
 );
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
-pub(crate) struct DependsOn {
+pub(crate) struct Dependency {
     pub(crate) condition: Condition,
 }
 
@@ -158,14 +191,14 @@ pub(crate) enum Condition {
 
 serde_conv!(
     DependsOnVec,
-    IndexMap<String, DependsOn>,
-    |dependencies: &IndexMap<String, DependsOn>| dependencies.keys().cloned().collect::<Vec<_>>(),
+    IndexMap<String, Dependency>,
+    |dependencies: &IndexMap<String, Dependency>| dependencies.keys().cloned().collect::<Vec<_>>(),
     |dependencies: Vec<String>| -> std::result::Result<_, Infallible> {
         Ok(IndexMap::from_iter(dependencies.into_iter().map(
             |dependency| {
                 (
                     dependency,
-                    DependsOn {
+                    Dependency {
                         condition: Condition::Started,
                     },
                 )
@@ -262,8 +295,27 @@ pub(crate) struct Logging {
 
 #[skip_serializing_none]
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
+pub(crate) struct ServiceNetwork {
+    pub(crate) aliases: Option<Vec<String>>,
+    pub(crate) ipv4_address: Option<String>,
+    pub(crate) ipv6_address: Option<String>,
+    pub(crate) link_local_ips: Option<Vec<String>>,
+    pub(crate) priority: Option<i32>,
+}
+
+serde_conv!(
+    NetworksVec,
+    IndexMap<String, Option<ServiceNetwork>>,
+    |networks: &IndexMap<String, Option<ServiceNetwork>>| networks.keys().cloned().collect::<Vec<_>>(),
+    |networks: Vec<String>| -> std::result::Result<_, Infallible> {
+        Ok(IndexMap::from_iter(networks.into_iter().map(|network| (network, None))))
+    }
+);
+
+#[skip_serializing_none]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
 pub(crate) struct Port {
-    pub(crate) target: u32,
+    pub(crate) target: String,
     pub(crate) published: Option<String>,
     pub(crate) host_ip: Option<String>,
     pub(crate) protocol: Option<String>,
@@ -273,7 +325,7 @@ serde_conv!(
     PortOrString,
     Port,
     |port: &Port| {
-        let mut string = port.target.to_string();
+        let mut string = port.target.to_owned();
 
         if let Some(published) = port.published.to_owned() {
             string = format!("{published}:{string}");
@@ -293,10 +345,10 @@ serde_conv!(
         let mut parts = port.split(':').rev();
         let container_port = parts.next().unwrap();
         let mut container_parts = container_port.split('/');
-        let target = container_parts.next().unwrap();
+        let target = container_parts.next().unwrap().to_owned();
 
         Ok(Port {
-            target: target.parse()?,
+            target,
             published: parts.next().and_then(|part| {
                 if part.is_empty() {
                     None
@@ -328,7 +380,7 @@ serde_conv!(
     |_: &Port| 0,
     |target: u32| -> std::result::Result<_, Infallible> {
         Ok(Port {
-            target,
+            target: target.to_string(),
             published: None,
             host_ip: None,
             protocol: None,
@@ -349,7 +401,7 @@ serde_conv!(
         let variables = variables.into_iter().map(|variable| -> Result<_> {
             let mut parts = variable.split('=');
             let key = parts.next().unwrap().to_owned();
-            let value = parts.next().map(|part| part.to_owned()).ok_or_else(|| anyhow!("parameter not defined"))?;
+            let value = parts.next().map(|part| part.to_owned()).ok_or_else(|| anyhow!("value not defined"))?;
 
             Ok((key, value))
         }).collect::<Result<Vec<_>, _>>()?;
@@ -360,9 +412,9 @@ serde_conv!(
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 #[serde(untagged)]
-pub(crate) enum Ulimits {
-    Single(isize),
-    Double { soft: isize, hard: isize },
+pub(crate) enum Limit {
+    Single(i32),
+    Double { soft: i32, hard: i32 },
 }
 
 #[serde_as]
@@ -433,4 +485,40 @@ pub(crate) fn parse(paths: Option<Vec<String>>) -> Result<Compose> {
     }
 
     Ok(combined_file)
+}
+
+#[cfg(test)]
+mod tests {
+    use glob::glob;
+    use std::fs;
+
+    use super::Compose;
+
+    #[test]
+    fn serde_compose() {
+        let mut all_succeeded = true;
+
+        for mut entry in glob("tests/fixtures/**/compose.yaml")
+            .expect("Failed to read glob pattern")
+            .filter_map(Result::ok)
+        {
+            let contents = fs::read_to_string(&entry).unwrap();
+
+            match serde_yaml::from_str::<Compose>(&contents) {
+                Ok(file) => {
+                    entry.set_file_name("expected.yaml");
+
+                    let expected = fs::read_to_string(&entry).unwrap();
+
+                    assert_eq!(serde_yaml::to_string(&file).unwrap(), expected);
+                }
+                Err(e) => {
+                    all_succeeded = false;
+                    eprintln!("{}: {:?}", entry.display(), e);
+                }
+            }
+        }
+
+        assert!(all_succeeded);
+    }
 }

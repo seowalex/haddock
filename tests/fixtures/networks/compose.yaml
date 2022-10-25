@@ -1,0 +1,27 @@
+services:
+  frontend:
+    image: awesome/webapp
+    networks:
+      - front-tier
+      - back-tier
+
+  monitoring:
+    image: awesome/monitoring
+    networks:
+      - admin
+
+  backend:
+    image: awesome/backend
+    networks:
+      back-tier:
+        aliases:
+          - database
+        ipv4_address: 172.16.238.10
+        ipv6_address: 2001:3984:3989::10
+        priority: 1000
+      admin:
+        aliases:
+          - mysql
+        link_local_ips:
+          - 57.123.22.11
+          - 57.123.22.13

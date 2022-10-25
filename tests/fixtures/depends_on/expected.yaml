@@ -1,0 +1,12 @@
+services:
+  web:
+    depends_on:
+      db:
+        condition: service_started
+      redis:
+        condition: service_started
+    image: web
+  redis:
+    image: redis
+  db:
+    image: postgres

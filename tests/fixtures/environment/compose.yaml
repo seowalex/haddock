@@ -1,0 +1,7 @@
+services:
+  redis:
+    image: redis
+    environment:
+      - RACK_ENV=development
+      - SHOW=true
+      - USER_INPUT

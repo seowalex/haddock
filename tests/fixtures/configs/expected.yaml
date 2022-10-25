@@ -1,0 +1,6 @@
+services:
+  redis:
+    configs:
+    - source: my_config
+    - source: my_other_config
+    image: redis:latest

@@ -1,0 +1,7 @@
+services:
+  foo:
+    image: busybox
+    cpu_period: 95000
+    cpu_quota: 11000
+    cpu_rt_period: '1400us'
+    cpu_rt_runtime: '400ms'

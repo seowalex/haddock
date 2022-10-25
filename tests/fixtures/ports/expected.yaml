@@ -1,0 +1,21 @@
+services:
+  frontend:
+    image: awesome/webapp
+    ports:
+    - target: '3000'
+    - target: 3000-3005
+    - target: '8000'
+      published: '8000'
+    - target: 8080-8081
+      published: 9090-9091
+    - target: '22'
+      published: '49100'
+    - target: '8001'
+      published: '8001'
+      host_ip: 127.0.0.1
+    - target: 5000-5010
+      published: 5000-5010
+      host_ip: 127.0.0.1
+    - target: '6060'
+      published: '6060'
+      protocol: udp

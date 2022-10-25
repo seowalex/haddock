@@ -1,0 +1,5 @@
+services:
+  foo:
+    image: busybox
+    command: bundle exec thin -p 3000
+    entrypoint: php -d zend_extension=/usr/local/lib/php/extensions/no-debug-non-zts-20100525/xdebug.so -d memory_limit=-1 vendor/bin/phpunit
