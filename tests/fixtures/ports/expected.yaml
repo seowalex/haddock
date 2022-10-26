@@ -19,3 +19,5 @@ services:
     - target: '6060'
       published: '6060'
       protocol: udp
+    - target: '80'
+      host_ip: 127.0.0.1

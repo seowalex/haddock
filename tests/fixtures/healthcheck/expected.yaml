@@ -2,8 +2,12 @@ services:
   myservice:
     healthcheck:
       test:
-      - CMD-SHELL
-      - curl -f https://localhost || exit 1
+      - curl
+      - -f
+      - https://localhost
+      - '||'
+      - exit
+      - '1'
       interval: 1m 30s
       timeout: 10s
       start_period: 40s
