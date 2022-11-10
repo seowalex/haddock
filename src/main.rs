@@ -5,7 +5,7 @@ use anyhow::Result;
 use clap::Parser;
 
 #[derive(Parser, Debug)]
-#[command(version, about)]
+#[command(version, about, next_display_order = None)]
 struct Args {
     #[command(subcommand)]
     command: commands::Command,

@@ -4,6 +4,7 @@ use serde_json::json;
 
 /// Print version information
 #[derive(clap::Args, Debug)]
+#[command(next_display_order = None)]
 pub(crate) struct Args {
     /// Format the output
     #[arg(short, long, value_enum, default_value_t = Format::Pretty)]

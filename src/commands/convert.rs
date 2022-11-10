@@ -7,7 +7,7 @@ use crate::compose;
 
 /// Converts the compose file to platform's canonical format
 #[derive(clap::Args, Debug)]
-#[command(alias = "config")]
+#[command(alias = "config", next_display_order = None)]
 pub(crate) struct Args {
     /// Format the output
     #[arg(long, value_enum, default_value_t = Format::Yaml)]
