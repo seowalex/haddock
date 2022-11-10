@@ -1,7 +1,0 @@
-services:
-  redis:
-    image: redis
-    memswap_limit: 1g
-  db:
-    image: postgres
-    memswap_limit: -1

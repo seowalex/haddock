@@ -1,7 +1,0 @@
-services:
-  redis:
-    image: redis
-    labels:
-      - com.example.description=Accounting webapp
-      - com.example.department=Finance
-      - com.example.label-with-empty-value

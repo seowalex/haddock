@@ -1,7 +1,0 @@
-services:
-  foo:
-    cpu_period: 95000
-    cpu_quota: 11000
-    cpu_rt_period: 1400
-    cpu_rt_runtime: 400000
-    image: busybox
