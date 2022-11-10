@@ -41,55 +41,53 @@ enum Format {
 pub(crate) fn run(args: Args, paths: Option<Vec<String>>) -> Result<()> {
     let file = compose::parse(paths)?;
 
-    if args.services {
-        for service in file.services.into_keys() {
-            println!("{service}");
-        }
-    } else if args.volumes {
-        if let Some(volumes) = file.volumes {
-            for volume in volumes.into_keys() {
-                println!("{volume}");
+    if !args.quiet {
+        if args.services {
+            for service in file.services.into_keys() {
+                println!("{service}");
             }
-        }
-    } else if args.profiles {
-        let mut all_profiles = IndexSet::new();
-
-        for service in file.services.into_values() {
-            if let Some(profiles) = service.profiles {
-                all_profiles.extend(profiles);
-            }
-        }
-
-        for profile in all_profiles {
-            println!("{profile}");
-        }
-    } else if args.images {
-        for service in file.services.into_values() {
-            println!("{}", service.image);
-        }
-    } else {
-        match args.format {
-            Format::Yaml => {
-                let contents = serde_yaml::to_string(&file)?;
-
-                if !args.quiet && args.output.is_none() {
-                    print!("{contents}");
-                }
-
-                if let Some(path) = args.output {
-                    fs::write(path, contents)?;
+        } else if args.volumes {
+            if let Some(volumes) = file.volumes {
+                for volume in volumes.into_keys() {
+                    println!("{volume}");
                 }
             }
-            Format::Json => {
-                let mut contents = serde_json::to_string_pretty(&file)?;
-                contents.push('\n');
+        } else if args.profiles {
+            let mut all_profiles = IndexSet::new();
 
-                if !args.quiet && args.output.is_none() {
-                    print!("{contents}");
+            for service in file.services.into_values() {
+                if let Some(profiles) = service.profiles {
+                    all_profiles.extend(profiles);
                 }
+            }
 
-                if let Some(path) = args.output {
-                    fs::write(path, contents)?;
+            for profile in all_profiles {
+                println!("{profile}");
+            }
+        } else if args.images {
+            for service in file.services.into_values() {
+                println!("{}", service.image);
+            }
+        } else {
+            match args.format {
+                Format::Yaml => {
+                    let contents = serde_yaml::to_string(&file)?;
+
+                    if let Some(path) = args.output {
+                        fs::write(path, contents)?;
+                    } else {
+                        print!("{contents}");
+                    }
+                }
+                Format::Json => {
+                    let mut contents = serde_json::to_string_pretty(&file)?;
+                    contents.push('\n');
+
+                    if let Some(path) = args.output {
+                        fs::write(path, contents)?;
+                    } else {
+                        print!("{contents}");
+                    }
                 }
             }
         }
