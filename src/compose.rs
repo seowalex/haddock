@@ -5,8 +5,8 @@ use indexmap::{IndexMap, IndexSet};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use serde_with::{
-    formats::SpaceSeparator, serde_as, serde_conv, skip_serializing_none, DurationMicroSeconds,
-    OneOrMany, PickFirst, StringWithSeparator,
+    formats::SpaceSeparator, serde_as, serde_conv, skip_serializing_none, DisplayFromStr,
+    DurationMicroSeconds, OneOrMany, PickFirst, StringWithSeparator,
 };
 use std::{convert::Infallible, fs, time::Duration};
 
@@ -38,13 +38,13 @@ pub(crate) struct Service {
     #[serde_as(as = "Option<Vec<PickFirst<(_, FileReferenceOrString)>>>")]
     pub(crate) configs: Option<Vec<FileReference>>,
     pub(crate) container_name: Option<String>,
-    #[serde_as(as = "Option<PickFirst<(DurationMicroSeconds, DurationWithPrefix)>>")]
+    #[serde_as(as = "Option<PickFirst<(DurationMicroSeconds, DurationWithSuffix)>>")]
     pub(crate) cpu_period: Option<Duration>,
-    #[serde_as(as = "Option<PickFirst<(DurationMicroSeconds, DurationWithPrefix)>>")]
+    #[serde_as(as = "Option<PickFirst<(DurationMicroSeconds, DurationWithSuffix)>>")]
     pub(crate) cpu_quota: Option<Duration>,
-    #[serde_as(as = "Option<PickFirst<(DurationMicroSeconds, DurationWithPrefix)>>")]
+    #[serde_as(as = "Option<PickFirst<(DurationMicroSeconds, DurationWithSuffix)>>")]
     pub(crate) cpu_rt_period: Option<Duration>,
-    #[serde_as(as = "Option<PickFirst<(DurationMicroSeconds, DurationWithPrefix)>>")]
+    #[serde_as(as = "Option<PickFirst<(DurationMicroSeconds, DurationWithSuffix)>>")]
     pub(crate) cpu_rt_runtime: Option<Duration>,
     pub(crate) cpu_shares: Option<i64>,
     pub(crate) cpus: Option<f32>,
@@ -71,7 +71,7 @@ pub(crate) struct Service {
     pub(crate) group_add: Option<Vec<String>>,
     pub(crate) healthcheck: Option<Healthcheck>,
     pub(crate) hostname: Option<String>,
-    pub(crate) image: String,
+    pub(crate) image: Option<String>,
     pub(crate) init: Option<bool>,
     pub(crate) ipc: Option<String>,
     #[serde_as(as = "Option<PickFirst<(_, LabelsVec)>>")]
@@ -103,7 +103,7 @@ pub(crate) struct Service {
     pub(crate) secrets: Option<Vec<FileReference>>,
     pub(crate) security_opt: Option<Vec<String>>,
     pub(crate) shm_size: Option<Byte>,
-    #[serde_as(as = "Option<DurationWithPrefix>")]
+    #[serde_as(as = "Option<DurationWithSuffix>")]
     pub(crate) stop_grace_period: Option<Duration>,
     pub(crate) stop_signal: Option<String>,
     pub(crate) storage_opt: Option<IndexMap<String, String>>,
@@ -143,12 +143,14 @@ pub(crate) struct ThrottleDevice {
 }
 
 #[skip_serializing_none]
+#[serde_as]
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct FileReference {
     pub(crate) source: String,
     pub(crate) target: Option<String>,
     pub(crate) uid: Option<String>,
     pub(crate) gid: Option<String>,
+    #[serde_as(as = "Option<PickFirst<(_, DisplayFromStr)>>")]
     pub(crate) mode: Option<u32>,
 }
 
@@ -168,7 +170,7 @@ serde_conv!(
 );
 
 serde_conv!(
-    DurationWithPrefix,
+    DurationWithSuffix,
     Duration,
     |duration: &Duration| format_duration(*duration).to_string(),
     |duration: String| parse_duration(&duration)
@@ -243,11 +245,11 @@ pub(crate) struct Extends {
 pub(crate) struct Healthcheck {
     #[serde_as(as = "Option<PickFirst<(_, StringWithSeparator::<SpaceSeparator, String>)>>")]
     pub(crate) test: Option<Vec<String>>,
-    #[serde_as(as = "Option<DurationWithPrefix>")]
+    #[serde_as(as = "Option<DurationWithSuffix>")]
     pub(crate) interval: Option<Duration>,
-    #[serde_as(as = "Option<DurationWithPrefix>")]
+    #[serde_as(as = "Option<DurationWithSuffix>")]
     pub(crate) timeout: Option<Duration>,
-    #[serde_as(as = "Option<DurationWithPrefix>")]
+    #[serde_as(as = "Option<DurationWithSuffix>")]
     pub(crate) start_period: Option<Duration>,
     pub(crate) retries: Option<u64>,
     pub(crate) disable: Option<bool>,
@@ -313,9 +315,12 @@ serde_conv!(
 );
 
 #[skip_serializing_none]
+#[serde_as]
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct Port {
+    #[serde_as(as = "PickFirst<(_, StringOrU16)>")]
     pub(crate) target: String,
+    #[serde_as(as = "Option<PickFirst<(_, StringOrU16)>>")]
     pub(crate) published: Option<String>,
     pub(crate) host_ip: Option<String>,
     pub(crate) protocol: Option<String>,
@@ -380,7 +385,7 @@ serde_conv!(
 serde_conv!(
     PortOrU32,
     Port,
-    |_: &Port| 0,
+    |port: &Port| port.target.parse::<u32>().unwrap(),
     |target: u32| -> std::result::Result<_, Infallible> {
         Ok(Port {
             target: target.to_string(),
@@ -391,12 +396,20 @@ serde_conv!(
     }
 );
 
+serde_conv!(
+    StringOrU16,
+    String,
+    |port: &String| port.parse::<u16>().unwrap(),
+    |port: u16| -> std::result::Result<_, Infallible> { Ok(port.to_string()) }
+);
+
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum PullPolicy {
     Always,
     Never,
     Missing,
+    Build,
     Newer,
 }
 
@@ -481,7 +494,7 @@ pub(crate) struct ServiceVolumeTmpfs {
 
 #[serde_as]
 #[skip_serializing_none]
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct Volume {
     pub(crate) driver: Option<String>,
     pub(crate) driver_opts: Option<IndexMap<String, String>>,
