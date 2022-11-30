@@ -14,7 +14,7 @@ pub(crate) struct Args {
     short: bool,
 }
 
-#[derive(ValueEnum, Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(ValueEnum, Clone, Debug)]
 enum Format {
     Pretty,
     Json,

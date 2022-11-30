@@ -32,7 +32,7 @@ pub(crate) struct Args {
     output: Option<String>,
 }
 
-#[derive(ValueEnum, Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(ValueEnum, Clone, Debug)]
 enum Format {
     Yaml,
     Json,
