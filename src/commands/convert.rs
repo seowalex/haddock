@@ -67,7 +67,7 @@ pub(crate) fn run(args: Args, paths: Option<Vec<String>>) -> Result<()> {
         } else if args.images {
             for service in file.services.into_values() {
                 if let Some(image) = service.image {
-                    println!("{}", image);
+                    println!("{image}");
                 }
             }
         } else {

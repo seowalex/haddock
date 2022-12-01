@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use byte_unit::Byte;
 use humantime::{format_duration, parse_duration};
 use indexmap::{IndexMap, IndexSet};
@@ -51,7 +51,7 @@ pub(crate) struct Service {
     pub(crate) cpuset: Option<String>,
     #[serde_as(as = "Option<PickFirst<(_, DependsOnVec)>>")]
     pub(crate) depends_on: Option<IndexMap<String, Dependency>>,
-    pub(crate) device_cgroup_rules: Option<String>,
+    pub(crate) device_cgroup_rules: Option<Vec<String>>,
     pub(crate) devices: Option<Vec<String>>,
     #[serde_as(as = "Option<OneOrMany<_>>")]
     pub(crate) dns: Option<Vec<String>>,
@@ -146,7 +146,7 @@ pub(crate) struct ThrottleDevice {
 
 #[skip_serializing_none]
 #[serde_as]
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Default, Debug)]
 pub(crate) struct FileReference {
     pub(crate) source: String,
     pub(crate) target: Option<String>,
@@ -163,10 +163,7 @@ serde_conv!(
     |source| -> std::result::Result<_, Infallible> {
         Ok(FileReference {
             source,
-            target: None,
-            uid: None,
-            gid: None,
-            mode: None,
+            ..Default::default()
         })
     }
 );
@@ -318,7 +315,7 @@ serde_conv!(
 
 #[skip_serializing_none]
 #[serde_as]
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Default, Debug)]
 pub(crate) struct Port {
     #[serde_as(as = "PickFirst<(_, StringOrU16)>")]
     pub(crate) target: String,
@@ -351,7 +348,7 @@ serde_conv!(
 
         string
     },
-    |port: String| -> Result<_> {
+    |port: String| -> std::result::Result<_, Infallible> {
         let mut parts = port.split(':').rev();
         let container_port = parts.next().unwrap();
         let mut container_parts = container_port.split('/');
@@ -366,20 +363,8 @@ serde_conv!(
                     Some(part.to_owned())
                 }
             }),
-            host_ip: parts.next().and_then(|part| {
-                if part.is_empty() {
-                    None
-                } else {
-                    Some(part.to_owned())
-                }
-            }),
-            protocol: container_parts.next().and_then(|part| {
-                if part.is_empty() {
-                    None
-                } else {
-                    Some(part.to_owned())
-                }
-            }),
+            host_ip: parts.next().map(|part| part.to_owned()),
+            protocol: container_parts.next().map(|part| part.to_owned()),
         })
     }
 );
@@ -391,9 +376,7 @@ serde_conv!(
     |target: u32| -> std::result::Result<_, Infallible> {
         Ok(Port {
             target: target.to_string(),
-            published: None,
-            host_ip: None,
-            protocol: None,
+            ..Default::default()
         })
     }
 );
@@ -437,7 +420,7 @@ serde_conv!(
         let variables = variables.into_iter().map(|variable| -> Result<_> {
             let mut parts = variable.split('=');
             let key = parts.next().unwrap().to_owned();
-            let value = parts.next().map(|part| part.to_owned()).ok_or_else(|| anyhow!("value not defined for {}", key))?;
+            let value = parts.next().map(|part| part.to_owned()).ok_or_else(|| anyhow!("value not defined for {key}"))?;
 
             Ok((key, value))
         }).collect::<Result<Vec<_>, _>>()?;
@@ -474,11 +457,17 @@ pub(crate) enum ServiceVolumeType {
 }
 
 #[skip_serializing_none]
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Default, Debug)]
 pub(crate) struct ServiceVolumeBind {
     pub(crate) propagation: Option<String>,
     pub(crate) create_host_path: Option<bool>,
     pub(crate) selinux: Option<String>,
+}
+
+impl ServiceVolumeBind {
+    pub(crate) fn new() -> Self {
+        Default::default()
+    }
 }
 
 #[skip_serializing_none]
@@ -499,70 +488,80 @@ pub(crate) struct ServiceVolumeTmpfs {
 serde_conv!(
     ServiceVolumeOrString,
     ServiceVolume,
-    |_: &ServiceVolume| { "" },
-    |volume: String| -> Result<_> {
-        let parts = volume.split(':').collect::<Vec<_>>();
+    |_| {},
+    |mount: String| -> Result<_> {
         let mut r#type = ServiceVolumeType::Volume;
         let mut source = None;
         let target;
         let mut read_only = None;
         let mut bind = None;
+        let mut volume = None;
+        let mut options = "";
+        let parts = mount.split(':').collect::<Vec<_>>();
 
-        if parts.len() == 1 {
-            target = parts[0].to_owned();
-        } else if parts.len() == 2 {
-            if parts[1].starts_with('/') {
-                if parts[0].starts_with('.') || parts[0].starts_with('/') {
+        match parts[..] {
+            [dst] => {
+                target = dst.to_owned();
+            }
+            [src, dst] if dst.starts_with('/') => {
+                if src.starts_with('/') || src.starts_with('.') {
                     r#type = ServiceVolumeType::Bind;
                 }
 
-                source = Some(parts[0].to_owned());
-                target = parts[1].to_owned();
-            } else {
-                target = parts[0].to_owned();
-                let parts = parts[1].split(',');
+                source = Some(src.to_owned());
+                target = dst.to_owned();
+            }
+            [dst, opts] => {
+                target = dst.to_owned();
+                options = opts;
+            }
+            [src, dst, opts] => {
+                if src.starts_with('/') || src.starts_with('.') {
+                    r#type = ServiceVolumeType::Bind;
+                }
 
-                for part in parts {
-                    match part {
-                        "ro" => {
-                            read_only = Some(true);
-                        }
-                        "z" | "Z" => {
-                            bind = Some(ServiceVolumeBind {
-                                propagation: None,
-                                create_host_path: None,
-                                selinux: Some(part.to_owned()),
-                            });
-                        }
-                        _ => {}
-                    }
+                source = Some(src.to_owned());
+                target = dst.to_owned();
+                options = opts;
+            }
+            _ => {
+                bail!("too many colons in {mount}");
+            }
+        }
+
+        let options = options.split(',');
+        let mut unused = vec![];
+
+        for option in options {
+            match option {
+                "rw" | "ro" => {
+                    read_only = Some(option == "ro");
+                }
+                "shared" | "rshared" | "slave" | "rslave" | "private" | "rprivate"
+                | "unbindable" | "runbindable" => {
+                    bind.get_or_insert(ServiceVolumeBind::new()).propagation =
+                        Some(option.to_owned());
+                }
+                "z" | "Z" => {
+                    bind.get_or_insert(ServiceVolumeBind::new()).selinux = Some(option.to_owned());
+                }
+                "copy" | "nocopy" => {
+                    volume = Some(ServiceVolumeVolume {
+                        nocopy: Some(option == "nocopy"),
+                    })
+                }
+                "" => {}
+                _ => {
+                    unused.push(option);
                 }
             }
-        } else {
-            if parts[0].starts_with('.') || parts[0].starts_with('/') {
-                r#type = ServiceVolumeType::Bind;
-            }
+        }
 
-            source = Some(parts[0].to_owned());
-            target = parts[1].to_owned();
-
-            let parts = parts[1].split(',');
-
-            for part in parts {
-                match part {
-                    "ro" => {
-                        read_only = Some(true);
-                    }
-                    "z" | "Z" => {
-                        bind = Some(ServiceVolumeBind {
-                            propagation: None,
-                            create_host_path: None,
-                            selinux: Some(part.to_owned()),
-                        });
-                    }
-                    _ => {}
-                }
-            }
+        if !unused.is_empty() {
+            eprintln!(
+                "Warning: Unsupported/unknown mount options: {}",
+                unused.into_iter().join(", ")
+            );
         }
 
         Ok(ServiceVolume {
@@ -571,14 +570,14 @@ serde_conv!(
             target,
             read_only,
             bind,
-            volume: None,
+            volume,
             tmpfs: None,
         })
     }
 );
 
-#[serde_as]
 #[skip_serializing_none]
+#[serde_as]
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct Volume {
     pub(crate) driver: Option<String>,

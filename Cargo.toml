@@ -7,7 +7,7 @@ description = "Docker Compose for Podman"
 [dependencies]
 anyhow = "1.0.66"
 byte-unit = { version = "4.0.17", default-features = false, features = ["serde", "std"] }
-clap = { version = "4.0.28", features = ["cargo", "derive"] }
+clap = { version = "4.0.29", features = ["cargo", "derive"] }
 humantime = "2.1.0"
 indexmap = { version = "1.9.2", features = ["serde"] }
 itertools = "0.10.5"
