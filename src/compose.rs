@@ -18,6 +18,8 @@ pub(crate) struct Compose {
     pub(crate) services: IndexMap<String, Service>,
     pub(crate) networks: Option<IndexMap<String, Option<Network>>>,
     pub(crate) volumes: Option<IndexMap<String, Option<Volume>>>,
+    pub(crate) configs: Option<IndexMap<String, Config>>,
+    pub(crate) secrets: Option<IndexMap<String, Secret>>,
 }
 
 impl Compose {
@@ -682,6 +684,23 @@ pub(crate) struct Volume {
     pub(crate) name: Option<String>,
 }
 
+#[skip_serializing_none]
+#[derive(Serialize, Deserialize, Debug)]
+pub(crate) struct Config {
+    pub(crate) file: Option<String>,
+    pub(crate) external: Option<bool>,
+    pub(crate) name: Option<String>,
+}
+
+#[skip_serializing_none]
+#[derive(Serialize, Deserialize, Debug)]
+pub(crate) struct Secret {
+    pub(crate) file: Option<String>,
+    pub(crate) environment: Option<String>,
+    pub(crate) external: Option<bool>,
+    pub(crate) name: Option<String>,
+}
+
 pub(crate) fn parse(paths: Option<Vec<String>>) -> Result<Compose> {
     let contents = match paths {
         Some(paths) => paths
@@ -740,6 +759,22 @@ pub(crate) fn parse(paths: Option<Vec<String>>) -> Result<Compose> {
             (Some(combined_volumes), Some(volumes)) => combined_volumes.extend(volumes),
             (combined_volumes, volumes) if combined_volumes.is_none() && volumes.is_some() => {
                 *combined_volumes = volumes;
+            }
+            _ => {}
+        }
+
+        match (&mut combined_file.configs, file.configs) {
+            (Some(combined_configs), Some(configs)) => combined_configs.extend(configs),
+            (combined_configs, configs) if combined_configs.is_none() && configs.is_some() => {
+                *combined_configs = configs;
+            }
+            _ => {}
+        }
+
+        match (&mut combined_file.secrets, file.secrets) {
+            (Some(combined_secrets), Some(secrets)) => combined_secrets.extend(secrets),
+            (combined_secrets, secrets) if combined_secrets.is_none() && secrets.is_some() => {
+                *combined_secrets = secrets;
             }
             _ => {}
         }
