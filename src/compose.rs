@@ -30,6 +30,8 @@ impl Compose {
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct Service {
     pub(crate) blkio_config: Option<BlkioConfig>,
+    #[serde_as(as = "Option<PickFirst<(_, BuildConfigOrString)>>")]
+    pub(crate) build: Option<BuildConfig>,
     pub(crate) cap_add: Option<Vec<String>>,
     pub(crate) cap_drop: Option<Vec<String>>,
     pub(crate) cgroup_parent: Option<String>,
@@ -62,7 +64,7 @@ pub(crate) struct Service {
     pub(crate) entrypoint: Option<Vec<String>>,
     #[serde_as(as = "Option<OneOrMany<_>>")]
     pub(crate) env_file: Option<Vec<String>>,
-    #[serde_as(as = "Option<PickFirst<(_, EnvironmentVec)>>")]
+    #[serde_as(as = "Option<PickFirst<(_, MappingWithEqualsNull)>>")]
     pub(crate) environment: Option<IndexMap<String, Option<String>>>,
     pub(crate) expose: Option<Vec<String>>,
     pub(crate) extends: Option<Extends>,
@@ -74,7 +76,7 @@ pub(crate) struct Service {
     pub(crate) image: Option<String>,
     pub(crate) init: Option<bool>,
     pub(crate) ipc: Option<String>,
-    #[serde_as(as = "Option<PickFirst<(_, LabelsVec)>>")]
+    #[serde_as(as = "Option<PickFirst<(_, MappingWithEqualsEmpty)>>")]
     pub(crate) labels: Option<IndexMap<String, String>>,
     pub(crate) links: Option<Vec<String>>,
     pub(crate) logging: Option<Logging>,
@@ -107,7 +109,7 @@ pub(crate) struct Service {
     pub(crate) stop_grace_period: Option<Duration>,
     pub(crate) stop_signal: Option<String>,
     pub(crate) storage_opt: Option<IndexMap<String, String>>,
-    #[serde_as(as = "Option<PickFirst<(_, SysctlsVec)>>")]
+    #[serde_as(as = "Option<PickFirst<(_, MappingWithEqualsNoNull)>>")]
     pub(crate) sysctls: Option<IndexMap<String, String>>,
     #[serde_as(as = "Option<OneOrMany<_>>")]
     pub(crate) tmpfs: Option<Vec<String>>,
@@ -143,6 +145,43 @@ pub(crate) struct ThrottleDevice {
     pub(crate) path: String,
     pub(crate) rate: Byte,
 }
+
+#[skip_serializing_none]
+#[serde_as]
+#[derive(Serialize, Deserialize, Default, Debug)]
+pub(crate) struct BuildConfig {
+    pub(crate) context: String,
+    pub(crate) dockerfile: Option<String>,
+    #[serde_as(as = "Option<PickFirst<(_, MappingWithEqualsNull)>>")]
+    pub(crate) args: Option<IndexMap<String, Option<String>>>,
+    pub(crate) ssh: Option<Vec<String>>,
+    pub(crate) cache_from: Option<Vec<String>>,
+    pub(crate) cache_to: Option<Vec<String>>,
+    pub(crate) extra_hosts: Option<Vec<String>>,
+    pub(crate) isolation: Option<String>,
+    #[serde_as(as = "Option<PickFirst<(_, MappingWithEqualsEmpty)>>")]
+    pub(crate) labels: Option<IndexMap<String, String>>,
+    pub(crate) no_cache: Option<bool>,
+    pub(crate) pull: Option<bool>,
+    pub(crate) shm_size: Option<Byte>,
+    pub(crate) target: Option<String>,
+    #[serde_as(as = "Option<Vec<PickFirst<(_, FileReferenceOrString)>>>")]
+    pub(crate) secrets: Option<Vec<FileReference>>,
+    pub(crate) tags: Option<Vec<String>>,
+    pub(crate) platforms: Option<Vec<String>>,
+}
+
+serde_conv!(
+    BuildConfigOrString,
+    BuildConfig,
+    |build: &BuildConfig| { build.context.to_owned() },
+    |context| -> std::result::Result<_, Infallible> {
+        Ok(BuildConfig {
+            context,
+            ..Default::default()
+        })
+    }
+);
 
 #[skip_serializing_none]
 #[serde_as]
@@ -209,7 +248,7 @@ serde_conv!(
 );
 
 serde_conv!(
-    EnvironmentVec,
+    MappingWithEqualsNull,
     IndexMap<String, Option<String>>,
     |variables: &IndexMap<String, Option<String>>| {
         variables
@@ -255,7 +294,7 @@ pub(crate) struct Healthcheck {
 }
 
 serde_conv!(
-    LabelsVec,
+    MappingWithEqualsEmpty,
     IndexMap<String, String>,
     |variables: &IndexMap<String, String>| {
         variables
@@ -408,7 +447,7 @@ pub(crate) enum RestartPolicy {
 }
 
 serde_conv!(
-    SysctlsVec,
+    MappingWithEqualsNoNull,
     IndexMap<String, String>,
     |variables: &IndexMap<String, String>| {
         variables
@@ -583,7 +622,7 @@ pub(crate) struct Volume {
     pub(crate) driver: Option<String>,
     pub(crate) driver_opts: Option<IndexMap<String, String>>,
     pub(crate) external: Option<bool>,
-    #[serde_as(as = "Option<PickFirst<(_, LabelsVec)>>")]
+    #[serde_as(as = "Option<PickFirst<(_, MappingWithEqualsEmpty)>>")]
     pub(crate) labels: Option<IndexMap<String, String>>,
     pub(crate) name: Option<String>,
 }
