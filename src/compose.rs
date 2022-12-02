@@ -53,6 +53,7 @@ pub(crate) struct Service {
     pub(crate) cpuset: Option<String>,
     #[serde_as(as = "Option<PickFirst<(_, DependsOnVec)>>")]
     pub(crate) depends_on: Option<IndexMap<String, Dependency>>,
+    pub(crate) deploy: Option<DeployConfig>,
     pub(crate) device_cgroup_rules: Option<Vec<String>>,
     pub(crate) devices: Option<Vec<String>>,
     #[serde_as(as = "Option<OneOrMany<_>>")]
@@ -246,6 +247,29 @@ serde_conv!(
         )))
     }
 );
+
+#[skip_serializing_none]
+#[derive(Serialize, Deserialize, Debug)]
+pub(crate) struct DeployConfig {
+    pub(crate) resources: Option<Resources>,
+}
+
+#[skip_serializing_none]
+#[derive(Serialize, Deserialize, Debug)]
+pub(crate) struct Resources {
+    pub(crate) limits: Option<Resource>,
+    pub(crate) reservations: Option<Resource>,
+}
+
+#[skip_serializing_none]
+#[serde_as]
+#[derive(Serialize, Deserialize, Debug)]
+pub(crate) struct Resource {
+    #[serde_as(as = "Option<PickFirst<(_, DisplayFromStr)>>")]
+    pub(crate) cpus: Option<f32>,
+    pub(crate) memory: Option<Byte>,
+    pub(crate) pids: Option<i64>,
+}
 
 serde_conv!(
     MappingWithEqualsNull,
