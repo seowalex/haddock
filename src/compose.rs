@@ -736,6 +736,69 @@ pub(crate) fn parse(paths: Option<Vec<String>>) -> Result<Compose> {
     let mut combined_file = Compose::new();
 
     for (path, file, unused) in files {
+        for (name, service) in &file.services {
+            if service.build.is_none() && service.image.is_none() {
+                bail!("service {name} must define either a build section or an image");
+            }
+
+            if service.network_mode.as_deref().unwrap_or_default() == "host"
+                && service.ports.is_some()
+            {
+                bail!("service {name} cannot have port mappings due to host network mode");
+            }
+        }
+
+        if let Some(networks) = &file.networks {
+            for (name, network) in networks {
+                if let Some(network) = network {
+                    if network.external.unwrap_or_default()
+                        && (network.driver.is_some()
+                            || network.driver_opts.is_some()
+                            || network.enable_ipv6.is_some()
+                            || network.ipam.is_some()
+                            || network.internal.is_some()
+                            || network.labels.is_some())
+                    {
+                        bail!("network {name} is not managed and should not have other attributes set");
+                    }
+                }
+            }
+        }
+
+        if let Some(volumes) = &file.volumes {
+            for (name, volume) in volumes {
+                if let Some(volume) = volume {
+                    if volume.external.unwrap_or_default()
+                        && (volume.driver.is_some()
+                            || volume.driver_opts.is_some()
+                            || volume.labels.is_some())
+                    {
+                        bail!(
+                            "volume {name} is not managed and should not have other attributes set"
+                        );
+                    }
+                }
+            }
+        }
+
+        if let Some(configs) = &file.configs {
+            for (name, config) in configs {
+                if config.external.unwrap_or_default() && config.file.is_some() {
+                    bail!("config {name} is not managed and should not have a file specified");
+                }
+            }
+        }
+
+        if let Some(secrets) = &file.secrets {
+            for (name, secret) in secrets {
+                if secret.external.unwrap_or_default()
+                    && (secret.file.is_some() || secret.environment.is_some())
+                {
+                    bail!("secret {name} is not managed and should not have other attributes set");
+                }
+            }
+        }
+
         if !unused.is_empty() {
             eprintln!(
                 "Warning: Unsupported/unknown attributes in {path}: {}",
