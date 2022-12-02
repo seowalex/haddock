@@ -16,6 +16,7 @@ pub(crate) struct Compose {
     pub(crate) version: Option<String>,
     pub(crate) name: Option<String>,
     pub(crate) services: IndexMap<String, Service>,
+    pub(crate) networks: Option<IndexMap<String, Option<Network>>>,
     pub(crate) volumes: Option<IndexMap<String, Option<Volume>>>,
 }
 
@@ -350,6 +351,13 @@ pub(crate) struct Logging {
     pub(crate) options: Option<IndexMap<String, String>>,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(untagged)]
+pub(crate) enum SwapLimit {
+    Limited(Byte),
+    Unlimited(i8),
+}
+
 #[skip_serializing_none]
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct ServiceNetwork {
@@ -358,13 +366,6 @@ pub(crate) struct ServiceNetwork {
     pub(crate) ipv6_address: Option<String>,
     pub(crate) link_local_ips: Option<Vec<String>>,
     pub(crate) priority: Option<i32>,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-#[serde(untagged)]
-pub(crate) enum SwapLimit {
-    Limited(Byte),
-    Unlimited(i8),
 }
 
 serde_conv!(
@@ -642,6 +643,36 @@ serde_conv!(
 #[skip_serializing_none]
 #[serde_as]
 #[derive(Serialize, Deserialize, Debug)]
+pub(crate) struct Network {
+    pub(crate) driver: Option<String>,
+    pub(crate) driver_opts: Option<IndexMap<String, String>>,
+    pub(crate) enable_ipv6: Option<bool>,
+    pub(crate) ipam: Option<IpamConfig>,
+    pub(crate) internal: Option<bool>,
+    #[serde_as(as = "Option<PickFirst<(_, MappingWithEqualsEmpty)>>")]
+    pub(crate) labels: Option<IndexMap<String, String>>,
+    pub(crate) external: Option<bool>,
+    pub(crate) name: Option<String>,
+}
+
+#[skip_serializing_none]
+#[derive(Serialize, Deserialize, Debug)]
+pub(crate) struct IpamConfig {
+    pub(crate) driver: Option<String>,
+    pub(crate) config: Option<Vec<IpamPool>>,
+}
+
+#[skip_serializing_none]
+#[derive(Serialize, Deserialize, Debug)]
+pub(crate) struct IpamPool {
+    pub(crate) subnet: Option<String>,
+    pub(crate) ip_range: Option<String>,
+    pub(crate) gateway: Option<String>,
+}
+
+#[skip_serializing_none]
+#[serde_as]
+#[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct Volume {
     pub(crate) driver: Option<String>,
     pub(crate) driver_opts: Option<IndexMap<String, String>>,
@@ -696,6 +727,14 @@ pub(crate) fn parse(paths: Option<Vec<String>>) -> Result<Compose> {
         combined_file.version = file.version;
         combined_file.name = file.name;
         combined_file.services.extend(file.services);
+
+        match (&mut combined_file.networks, file.networks) {
+            (Some(combined_networks), Some(networks)) => combined_networks.extend(networks),
+            (combined_networks, networks) if combined_networks.is_none() && networks.is_some() => {
+                *combined_networks = networks;
+            }
+            _ => {}
+        }
 
         match (&mut combined_file.volumes, file.volumes) {
             (Some(combined_volumes), Some(volumes)) => combined_volumes.extend(volumes),
