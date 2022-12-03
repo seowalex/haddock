@@ -3,12 +3,21 @@ use byte_unit::Byte;
 use humantime::{format_duration, parse_duration};
 use indexmap::{IndexMap, IndexSet};
 use itertools::Itertools;
+use regex::Captures;
 use serde::{Deserialize, Serialize};
 use serde_with::{
     formats::SpaceSeparator, serde_as, serde_conv, skip_serializing_none, DisplayFromStr,
     DurationMicroSeconds, OneOrMany, PickFirst, StringWithSeparator,
 };
-use std::{convert::Infallible, fs, time::Duration};
+use serde_yaml::Value;
+use std::{convert::Infallible, env, fs, time::Duration};
+
+macro_rules! regex {
+    ($re:literal $(,)?) => {{
+        static RE: once_cell::sync::OnceCell<regex::Regex> = once_cell::sync::OnceCell::new();
+        RE.get_or_init(|| regex::Regex::new($re).unwrap())
+    }};
+}
 
 #[skip_serializing_none]
 #[derive(Serialize, Deserialize, Default, Debug)]
@@ -701,6 +710,28 @@ pub(crate) struct Secret {
     pub(crate) name: Option<String>,
 }
 
+fn interpolate(mut value: Value) -> Value {
+    if let Some(value) = value.as_str() {
+        return Value::String(
+            regex!(r"\$\{([^}]*)}")
+                .replace_all(value, |caps: &Captures| {
+                    env::var(&caps[1]).unwrap_or_default()
+                })
+                .into_owned(),
+        );
+    } else if let Some(values) = value.as_sequence_mut() {
+        for value in values {
+            *value = interpolate(value.to_owned());
+        }
+    } else if let Some(values) = value.as_mapping_mut() {
+        for value in values.values_mut() {
+            *value = interpolate(value.to_owned());
+        }
+    }
+
+    value
+}
+
 pub(crate) fn parse(paths: Option<Vec<String>>) -> Result<Compose> {
     let contents = match paths {
         Some(paths) => paths
@@ -711,26 +742,68 @@ pub(crate) fn parse(paths: Option<Vec<String>>) -> Result<Compose> {
                     .map(|content| (path, content))
             })
             .collect::<Result<Vec<_>, _>>()?,
-        None => vec![(
-            "compose.yaml".to_owned(),
-            fs::read_to_string("compose.yaml")
-                .or_else(|_| fs::read_to_string("compose.yml"))
-                .or_else(|_| fs::read_to_string("docker-compose.yaml"))
-                .or_else(|_| {
-                    fs::read_to_string("docker-compose.yml").context("compose.yaml not found")
-                })?,
-        )],
+        None => vec![fs::read_to_string("compose.yaml")
+            .map(|content| ("compose.yaml".to_owned(), content))
+            .or_else(|_| {
+                fs::read_to_string("compose.yml").map(|content| ("compose.yml".to_owned(), content))
+            })
+            .or_else(|_| {
+                fs::read_to_string("docker-compose.yaml")
+                    .map(|content| ("docker-compose.yaml".to_owned(), content))
+            })
+            .or_else(|_| {
+                fs::read_to_string("docker-compose.yml")
+                    .map(|content| ("docker-compose.yml".to_owned(), content))
+            })
+            .context("compose.yaml not found")?],
     };
     let files = contents
         .into_iter()
         .map(|(path, content)| {
-            let mut unused = IndexSet::new();
+            serde_yaml::from_str(&content).and_then(|file: Value| {
+                if let Some(values) = file.as_mapping() {
+                    for (key, value) in values {
+                        if key == "name" {
+                            if value.is_string() {
+                                env::set_var("COMPOSE_PROJECT_NAME", value.as_str().unwrap());
+                            } else if value.is_bool() {
+                                env::set_var(
+                                    "COMPOSE_PROJECT_NAME",
+                                    value.as_bool().unwrap().to_string(),
+                                );
+                            } else if value.is_u64() {
+                                env::set_var(
+                                    "COMPOSE_PROJECT_NAME",
+                                    value.as_u64().unwrap().to_string(),
+                                );
+                            } else if value.is_i64() {
+                                env::set_var(
+                                    "COMPOSE_PROJECT_NAME",
+                                    value.as_i64().unwrap().to_string(),
+                                );
+                            } else if value.is_f64() {
+                                env::set_var(
+                                    "COMPOSE_PROJECT_NAME",
+                                    value.as_f64().unwrap().to_string(),
+                                );
+                            }
+                        }
+                    }
+                }
 
-            serde_ignored::deserialize(serde_yaml::Deserializer::from_str(&content), |path| {
-                unused.insert(path.to_string());
+                serde_yaml::to_string(&interpolate(file)).map(|content| (path, content))
             })
-            .with_context(|| format!("{path} does not follow the Compose specification"))
-            .map(|file: Compose| (path, file, unused))
+        })
+        .flat_map(|contents| {
+            contents.map(|(path, content)| {
+                let mut unused = IndexSet::new();
+
+                serde_ignored::deserialize(serde_yaml::Deserializer::from_str(&content), |path| {
+                    unused.insert(path.to_string());
+                })
+                .with_context(|| format!("{path} does not follow the Compose specification"))
+                .map(|file: Compose| (path, file, unused))
+            })
         })
         .collect::<Result<Vec<_>, _>>()?;
     let mut combined_file = Compose::new();
