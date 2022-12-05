@@ -27,65 +27,67 @@ pub(crate) enum State {
     UnsetOrEmpty,
 }
 
-fn dollar(input: &str) -> IResult<&str, Token> {
-    value(Token::Str('$'.to_string()), preceded(char('$'), char('$')))(input)
+fn dollar_or_variable(input: &str) -> IResult<&str, Token> {
+    preceded(char('$'), cut(alt((dollar, variable))))(input)
 }
 
-fn parameter(input: &str) -> IResult<&str, &str> {
-    take_while1(|char: char| char.is_ascii_alphanumeric() || char == '_')(input)
+fn dollar(input: &str) -> IResult<&str, Token> {
+    value(Token::Str('$'.to_string()), char('$'))(input)
 }
 
 fn variable(input: &str) -> IResult<&str, Token> {
     alt((variable_unexpanded, variable_expanded))(input)
 }
 
+fn name(input: &str) -> IResult<&str, &str> {
+    take_while1(|char: char| char.is_ascii_alphanumeric() || char == '_')(input)
+}
+
 fn variable_unexpanded(input: &str) -> IResult<&str, Token> {
-    map(preceded(char('$'), parameter), |param: &str| {
-        Token::Var(param.to_owned(), None)
-    })(input)
+    map(name, |name| Token::Var(name.to_owned(), None))(input)
 }
 
 fn variable_expanded(input: &str) -> IResult<&str, Token> {
     map_parser(
-        preceded(
-            char('$'),
-            delimited(char('{'), take_until_unbalanced('{', '}'), char('}')),
-        ),
-        cut(alt((
-            map(all_consuming(parameter), |param| {
-                Token::Var(param.to_owned(), None)
-            }),
-            map(
-                tuple((
-                    parameter,
-                    alt((tag(":-"), tag("-"), tag(":?"), tag("?"))),
-                    string,
-                )),
-                |(param, separator, tokens)| {
-                    Token::Var(
-                        param.to_owned(),
-                        match separator {
-                            ":-" => Some(Var::Default(State::UnsetOrEmpty, tokens)),
-                            "-" => Some(Var::Default(State::Unset, tokens)),
-                            ":?" => Some(Var::Err(State::UnsetOrEmpty, tokens)),
-                            "?" => Some(Var::Err(State::Unset, tokens)),
-                            _ => None,
-                        },
-                    )
-                },
-            ),
+        delimited(char('{'), take_until_unbalanced('{', '}'), char('}')),
+        cut(alt((parameter, parameter_expanded))),
+    )(input)
+}
+
+fn parameter(input: &str) -> IResult<&str, Token> {
+    all_consuming(variable_unexpanded)(input)
+}
+
+fn parameter_expanded(input: &str) -> IResult<&str, Token> {
+    map(
+        all_consuming(tuple((
+            name,
+            alt((tag(":-"), tag("-"), tag(":?"), tag("?"))),
+            string,
         ))),
+        |(name, separator, tokens)| {
+            Token::Var(
+                name.to_owned(),
+                match separator {
+                    ":-" => Some(Var::Default(State::UnsetOrEmpty, tokens)),
+                    "-" => Some(Var::Default(State::Unset, tokens)),
+                    ":?" => Some(Var::Err(State::UnsetOrEmpty, tokens)),
+                    "?" => Some(Var::Err(State::Unset, tokens)),
+                    _ => None,
+                },
+            )
+        },
     )(input)
 }
 
 fn string(input: &str) -> IResult<&str, Vec<Token>> {
-    all_consuming(fold_many0(
+    fold_many0(
         verify(
             many_till(
                 anychar,
-                alt((map(alt((variable, dollar)), Some), value(None, eof))),
+                alt((map(dollar_or_variable, Some), value(None, eof))),
             ),
-            |(chars, output)| output.is_some() || !chars.is_empty(),
+            |(chars, token)| token.is_some() || !chars.is_empty(),
         ),
         Vec::new,
         |mut tokens, token| {
@@ -115,9 +117,9 @@ fn string(input: &str) -> IResult<&str, Vec<Token>> {
 
             tokens
         },
-    ))(input)
+    )(input)
 }
 
 pub(crate) fn parse(input: &str) -> IResult<&str, Vec<Token>> {
-    string(input)
+    all_consuming(string)(input)
 }
