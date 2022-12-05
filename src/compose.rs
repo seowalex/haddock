@@ -1,3 +1,5 @@
+mod parser;
+
 use anyhow::{anyhow, bail, Context, Result};
 use byte_unit::Byte;
 use humantime::{format_duration, parse_duration};
@@ -762,31 +764,29 @@ pub(crate) fn parse(paths: Option<Vec<String>>) -> Result<Compose> {
         .map(|(path, content)| {
             serde_yaml::from_str(&content).and_then(|file: Value| {
                 if let Some(values) = file.as_mapping() {
-                    for (key, value) in values {
-                        if key == "name" {
-                            if value.is_string() {
-                                env::set_var("COMPOSE_PROJECT_NAME", value.as_str().unwrap());
-                            } else if value.is_bool() {
-                                env::set_var(
-                                    "COMPOSE_PROJECT_NAME",
-                                    value.as_bool().unwrap().to_string(),
-                                );
-                            } else if value.is_u64() {
-                                env::set_var(
-                                    "COMPOSE_PROJECT_NAME",
-                                    value.as_u64().unwrap().to_string(),
-                                );
-                            } else if value.is_i64() {
-                                env::set_var(
-                                    "COMPOSE_PROJECT_NAME",
-                                    value.as_i64().unwrap().to_string(),
-                                );
-                            } else if value.is_f64() {
-                                env::set_var(
-                                    "COMPOSE_PROJECT_NAME",
-                                    value.as_f64().unwrap().to_string(),
-                                );
-                            }
+                    if let Some((_, name)) = values.into_iter().find(|(key, _)| *key == "name") {
+                        if name.is_string() {
+                            env::set_var("COMPOSE_PROJECT_NAME", name.as_str().unwrap());
+                        } else if name.is_bool() {
+                            env::set_var(
+                                "COMPOSE_PROJECT_NAME",
+                                name.as_bool().unwrap().to_string(),
+                            );
+                        } else if name.is_u64() {
+                            env::set_var(
+                                "COMPOSE_PROJECT_NAME",
+                                name.as_u64().unwrap().to_string(),
+                            );
+                        } else if name.is_i64() {
+                            env::set_var(
+                                "COMPOSE_PROJECT_NAME",
+                                name.as_i64().unwrap().to_string(),
+                            );
+                        } else if name.is_f64() {
+                            env::set_var(
+                                "COMPOSE_PROJECT_NAME",
+                                name.as_f64().unwrap().to_string(),
+                            );
                         }
                     }
                 }
@@ -811,13 +811,13 @@ pub(crate) fn parse(paths: Option<Vec<String>>) -> Result<Compose> {
     for (path, file, unused) in files {
         for (name, service) in &file.services {
             if service.build.is_none() && service.image.is_none() {
-                bail!("service {name} must define either a build section or an image");
+                bail!("{path}: service {name} must define either a build section or an image");
             }
 
             if service.network_mode.as_deref().unwrap_or_default() == "host"
                 && service.ports.is_some()
             {
-                bail!("service {name} cannot have port mappings due to host network mode");
+                bail!("{path}: service {name} cannot have port mappings due to host network mode");
             }
         }
 
@@ -832,7 +832,7 @@ pub(crate) fn parse(paths: Option<Vec<String>>) -> Result<Compose> {
                             || network.internal.is_some()
                             || network.labels.is_some())
                     {
-                        bail!("network {name} is not managed and should not have other attributes set");
+                        bail!("{path}: network {name} is not managed and should not have other attributes set");
                     }
                 }
             }
@@ -847,7 +847,7 @@ pub(crate) fn parse(paths: Option<Vec<String>>) -> Result<Compose> {
                             || volume.labels.is_some())
                     {
                         bail!(
-                            "volume {name} is not managed and should not have other attributes set"
+                            "{path}: volume {name} is not managed and should not have other attributes set"
                         );
                     }
                 }
@@ -857,7 +857,9 @@ pub(crate) fn parse(paths: Option<Vec<String>>) -> Result<Compose> {
         if let Some(configs) = &file.configs {
             for (name, config) in configs {
                 if config.external.unwrap_or_default() && config.file.is_some() {
-                    bail!("config {name} is not managed and should not have a file specified");
+                    bail!(
+                        "{path}: config {name} is not managed and should not have a file specified"
+                    );
                 }
             }
         }
@@ -867,7 +869,7 @@ pub(crate) fn parse(paths: Option<Vec<String>>) -> Result<Compose> {
                 if secret.external.unwrap_or_default()
                     && (secret.file.is_some() || secret.environment.is_some())
                 {
-                    bail!("secret {name} is not managed and should not have other attributes set");
+                    bail!("{path}: secret {name} is not managed and should not have other attributes set");
                 }
             }
         }
