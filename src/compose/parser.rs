@@ -9,41 +9,37 @@ use nom::{
 };
 use parse_hyperlinks::take_until_unbalanced;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub(crate) enum Token {
     Str(String),
     Var(String, Option<Var>),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub(crate) enum Var {
     Default(State, Vec<Token>),
     Err(State, Vec<Token>),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub(crate) enum State {
     Unset,
     UnsetOrEmpty,
 }
 
 fn dollar_or_variable(input: &str) -> IResult<&str, Token> {
-    preceded(char('$'), cut(alt((dollar, variable))))(input)
+    preceded(char('$'), cut(alt((dollar, variable, variable_expanded))))(input)
 }
 
 fn dollar(input: &str) -> IResult<&str, Token> {
     value(Token::Str('$'.to_string()), char('$'))(input)
 }
 
-fn variable(input: &str) -> IResult<&str, Token> {
-    alt((variable_unexpanded, variable_expanded))(input)
-}
-
 fn name(input: &str) -> IResult<&str, &str> {
     take_while1(|char: char| char.is_ascii_alphanumeric() || char == '_')(input)
 }
 
-fn variable_unexpanded(input: &str) -> IResult<&str, Token> {
+fn variable(input: &str) -> IResult<&str, Token> {
     map(name, |name| Token::Var(name.to_owned(), None))(input)
 }
 
@@ -55,7 +51,7 @@ fn variable_expanded(input: &str) -> IResult<&str, Token> {
 }
 
 fn parameter(input: &str) -> IResult<&str, Token> {
-    all_consuming(variable_unexpanded)(input)
+    all_consuming(variable)(input)
 }
 
 fn parameter_expanded(input: &str) -> IResult<&str, Token> {
@@ -109,7 +105,7 @@ fn string(input: &str) -> IResult<&str, Vec<Token>> {
 
             if let Some(var) = token.1 {
                 if let (Some(Token::Str(last)), Token::Str(string)) = (tokens.last_mut(), &var) {
-                    *last = format!("{last}{string}");
+                    last.push_str(string);
                 } else {
                     tokens.push(var);
                 }
@@ -122,4 +118,323 @@ fn string(input: &str) -> IResult<&str, Vec<Token>> {
 
 pub(crate) fn parse(input: &str) -> IResult<&str, Vec<Token>> {
     all_consuming(string)(input)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{parse, State, Token, Var};
+    use nom::{
+        error::{
+            Error,
+            ErrorKind::{Char, Tag, TakeWhile1},
+        },
+        Err::Failure,
+    };
+
+    #[test]
+    fn string() {
+        assert_eq!(parse("foo"), Ok(("", vec![Token::Str("foo".to_owned())])));
+    }
+
+    #[test]
+    fn variable() {
+        assert_eq!(
+            parse("$foo"),
+            Ok(("", vec![Token::Var("foo".to_owned(), None)]))
+        );
+    }
+
+    #[test]
+    fn variable_with_leading_string() {
+        assert_eq!(
+            parse(" $foo"),
+            Ok((
+                "",
+                vec![
+                    Token::Str(" ".to_owned()),
+                    Token::Var("foo".to_owned(), None)
+                ]
+            ))
+        );
+    }
+
+    #[test]
+    fn variable_with_trailing_string() {
+        assert_eq!(
+            parse("$foo "),
+            Ok((
+                "",
+                vec![
+                    Token::Var("foo".to_owned(), None),
+                    Token::Str(" ".to_owned())
+                ]
+            ))
+        );
+    }
+
+    #[test]
+    fn variables() {
+        assert_eq!(
+            parse("$foo$bar"),
+            Ok((
+                "",
+                vec![
+                    Token::Var("foo".to_owned(), None),
+                    Token::Var("bar".to_owned(), None)
+                ]
+            ))
+        );
+    }
+
+    #[test]
+    fn variables_with_separating_string() {
+        assert_eq!(
+            parse("$foo $bar"),
+            Ok((
+                "",
+                vec![
+                    Token::Var("foo".to_owned(), None),
+                    Token::Str(" ".to_owned()),
+                    Token::Var("bar".to_owned(), None)
+                ]
+            ))
+        );
+    }
+
+    #[test]
+    fn empty_string() {
+        assert_eq!(parse(""), Ok(("", vec![])));
+    }
+
+    #[test]
+    fn escaped_dollar_sign() {
+        assert_eq!(
+            parse("$$foo"),
+            Ok(("", vec![Token::Str("$foo".to_string())]))
+        );
+    }
+
+    #[test]
+    fn single_dollar_sign() {
+        assert_eq!(
+            parse("$"),
+            Err(Failure(Error {
+                input: "",
+                code: Char
+            }))
+        );
+    }
+
+    #[test]
+    fn expanded_variable() {
+        assert_eq!(
+            parse("${foo}"),
+            Ok(("", vec![Token::Var("foo".to_owned(), None)]))
+        );
+    }
+
+    #[test]
+    fn expanded_variable_with_leading_string() {
+        assert_eq!(
+            parse(" ${foo}"),
+            Ok((
+                "",
+                vec![
+                    Token::Str(" ".to_owned()),
+                    Token::Var("foo".to_owned(), None)
+                ]
+            ))
+        );
+    }
+
+    #[test]
+    fn expanded_variable_with_trailing_string() {
+        assert_eq!(
+            parse("${foo} "),
+            Ok((
+                "",
+                vec![
+                    Token::Var("foo".to_owned(), None),
+                    Token::Str(" ".to_owned())
+                ]
+            ))
+        );
+    }
+
+    #[test]
+    fn expanded_variables() {
+        assert_eq!(
+            parse("${foo}${bar}"),
+            Ok((
+                "",
+                vec![
+                    Token::Var("foo".to_owned(), None),
+                    Token::Var("bar".to_owned(), None)
+                ]
+            ))
+        );
+    }
+
+    #[test]
+    fn expanded_variables_with_separating_string() {
+        assert_eq!(
+            parse("${foo} ${bar}"),
+            Ok((
+                "",
+                vec![
+                    Token::Var("foo".to_owned(), None),
+                    Token::Str(" ".to_owned()),
+                    Token::Var("bar".to_owned(), None)
+                ]
+            ))
+        );
+    }
+
+    #[test]
+    fn empty_expanded_variable() {
+        assert_eq!(
+            parse("${}"),
+            Err(Failure(Error {
+                input: "",
+                code: TakeWhile1
+            }))
+        );
+    }
+
+    #[test]
+    fn expanded_variable_with_default_if_unset_or_empty() {
+        assert_eq!(
+            parse("${foo:-bar}"),
+            Ok((
+                "",
+                vec![Token::Var(
+                    "foo".to_owned(),
+                    Some(Var::Default(
+                        State::UnsetOrEmpty,
+                        vec![Token::Str("bar".to_owned())]
+                    ))
+                )]
+            ))
+        );
+    }
+
+    #[test]
+    fn expanded_variable_with_default_if_unset() {
+        assert_eq!(
+            parse("${foo-bar}"),
+            Ok((
+                "",
+                vec![Token::Var(
+                    "foo".to_owned(),
+                    Some(Var::Default(
+                        State::Unset,
+                        vec![Token::Str("bar".to_owned())]
+                    ))
+                )]
+            ))
+        );
+    }
+
+    #[test]
+    fn expanded_variable_with_error_if_unset_or_empty() {
+        assert_eq!(
+            parse("${foo:?bar}"),
+            Ok((
+                "",
+                vec![Token::Var(
+                    "foo".to_owned(),
+                    Some(Var::Err(
+                        State::UnsetOrEmpty,
+                        vec![Token::Str("bar".to_owned())]
+                    ))
+                )]
+            ))
+        );
+    }
+
+    #[test]
+    fn expanded_variable_with_error_if_unset() {
+        assert_eq!(
+            parse("${foo?bar}"),
+            Ok((
+                "",
+                vec![Token::Var(
+                    "foo".to_owned(),
+                    Some(Var::Err(State::Unset, vec![Token::Str("bar".to_owned())]))
+                )]
+            ))
+        );
+    }
+
+    #[test]
+    fn nested_expanded_variable() {
+        assert_eq!(
+            parse("${foo:-${bar}}"),
+            Ok((
+                "",
+                vec![Token::Var(
+                    "foo".to_owned(),
+                    Some(Var::Default(
+                        State::UnsetOrEmpty,
+                        vec![Token::Var("bar".to_owned(), None)]
+                    ))
+                )]
+            ))
+        );
+    }
+
+    #[test]
+    fn double_nested_expanded_variable() {
+        assert_eq!(
+            parse("${foo:-${bar:-${hello}}}"),
+            Ok((
+                "",
+                vec![Token::Var(
+                    "foo".to_owned(),
+                    Some(Var::Default(
+                        State::UnsetOrEmpty,
+                        vec![Token::Var(
+                            "bar".to_owned(),
+                            Some(Var::Default(
+                                State::UnsetOrEmpty,
+                                vec![Token::Var("hello".to_owned(), None)]
+                            ))
+                        )]
+                    ))
+                )]
+            ))
+        );
+    }
+
+    #[test]
+    fn nested_expanded_variable_with_leading_and_trailing_strings() {
+        assert_eq!(
+            parse("${foo:- ${bar} }"),
+            Ok((
+                "",
+                vec![Token::Var(
+                    "foo".to_owned(),
+                    Some(Var::Default(
+                        State::UnsetOrEmpty,
+                        vec![
+                            Token::Str(" ".to_owned()),
+                            Token::Var("bar".to_owned(), None),
+                            Token::Str(" ".to_owned())
+                        ]
+                    ))
+                )]
+            ))
+        );
+    }
+
+    #[test]
+    fn expanded_variable_with_illegal_name() {
+        assert_eq!(
+            parse("${foo$}"),
+            Err(Failure(Error {
+                input: "$",
+                code: Tag
+            }))
+        );
+    }
 }
