@@ -1,11 +1,10 @@
 mod parser;
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{anyhow, bail, Context, Error, Result};
 use byte_unit::Byte;
 use humantime::{format_duration, parse_duration};
 use indexmap::{IndexMap, IndexSet};
 use itertools::Itertools;
-use regex::Captures;
 use serde::{Deserialize, Serialize};
 use serde_with::{
     formats::SpaceSeparator, serde_as, serde_conv, skip_serializing_none, DisplayFromStr,
@@ -13,13 +12,6 @@ use serde_with::{
 };
 use serde_yaml::Value;
 use std::{convert::Infallible, env, fs, time::Duration};
-
-macro_rules! regex {
-    ($re:literal $(,)?) => {{
-        static RE: once_cell::sync::OnceCell<regex::Regex> = once_cell::sync::OnceCell::new();
-        RE.get_or_init(|| regex::Regex::new($re).unwrap())
-    }};
-}
 
 #[skip_serializing_none]
 #[derive(Serialize, Deserialize, Default, Debug)]
@@ -712,26 +704,55 @@ pub(crate) struct Secret {
     pub(crate) name: Option<String>,
 }
 
-fn interpolate(mut value: Value) -> Value {
+fn evaluate(tokens: Vec<parser::Token>) -> Result<String> {
+    tokens
+        .into_iter()
+        .map(|token| match token {
+            parser::Token::Str(string) => Ok(string),
+            parser::Token::Var(name, var) => match var {
+                Some(parser::Var::Default(state, tokens)) => match state {
+                    parser::State::Unset => env::var(name),
+                    parser::State::UnsetOrEmpty => env::var(name).and_then(|var| {
+                        if var.is_empty() {
+                            Err(env::VarError::NotPresent)
+                        } else {
+                            Ok(var)
+                        }
+                    }),
+                }
+                .or_else(|_| evaluate(tokens)),
+                Some(parser::Var::Err(state, tokens)) => match state {
+                    parser::State::Unset => env::var(name),
+                    parser::State::UnsetOrEmpty => env::var(name).and_then(|var| {
+                        if var.is_empty() {
+                            Err(env::VarError::NotPresent)
+                        } else {
+                            Ok(var)
+                        }
+                    }),
+                }
+                .or_else(|_| evaluate(tokens).and_then(|err| bail!(err))),
+                None => Ok(env::var(name).unwrap_or_default()),
+            },
+        })
+        .collect::<Result<Vec<_>, _>>()
+        .map(|tokens| tokens.join(""))
+}
+
+fn interpolate(mut value: Value) -> Result<Value> {
     if let Some(value) = value.as_str() {
-        return Value::String(
-            regex!(r"\$\{([^}]*)}")
-                .replace_all(value, |caps: &Captures| {
-                    env::var(&caps[1]).unwrap_or_default()
-                })
-                .into_owned(),
-        );
+        return parser::parse(value).and_then(evaluate).map(Value::String);
     } else if let Some(values) = value.as_sequence_mut() {
         for value in values {
-            *value = interpolate(value.to_owned());
+            *value = interpolate(value.to_owned())?;
         }
     } else if let Some(values) = value.as_mapping_mut() {
         for value in values.values_mut() {
-            *value = interpolate(value.to_owned());
+            *value = interpolate(value.to_owned())?;
         }
     }
 
-    value
+    Ok(value)
 }
 
 pub(crate) fn parse(paths: Option<Vec<String>>) -> Result<Compose> {
@@ -762,40 +783,57 @@ pub(crate) fn parse(paths: Option<Vec<String>>) -> Result<Compose> {
     let files = contents
         .into_iter()
         .map(|(path, content)| {
-            serde_yaml::from_str(&content).and_then(|file: Value| {
-                if let Some(values) = file.as_mapping() {
-                    if let Some((_, name)) = values.into_iter().find(|(key, _)| *key == "name") {
-                        if name.is_string() {
-                            env::set_var("COMPOSE_PROJECT_NAME", name.as_str().unwrap());
-                        } else if name.is_bool() {
-                            env::set_var(
-                                "COMPOSE_PROJECT_NAME",
-                                name.as_bool().unwrap().to_string(),
-                            );
-                        } else if name.is_u64() {
-                            env::set_var(
-                                "COMPOSE_PROJECT_NAME",
-                                name.as_u64().unwrap().to_string(),
-                            );
-                        } else if name.is_i64() {
-                            env::set_var(
-                                "COMPOSE_PROJECT_NAME",
-                                name.as_i64().unwrap().to_string(),
-                            );
-                        } else if name.is_f64() {
-                            env::set_var(
-                                "COMPOSE_PROJECT_NAME",
-                                name.as_f64().unwrap().to_string(),
-                            );
+            serde_yaml::from_str(&content)
+                .map(|mut content: Value| {
+                    if let Some(values) = content.as_mapping_mut() {
+                        if let Some((_, name)) = values.into_iter().find(|(key, _)| *key == "name")
+                        {
+                            if name.is_string() {
+                                if let Ok(interpolated_name) = interpolate(name.to_owned()) {
+                                    *name = interpolated_name;
+                                }
+
+                                env::set_var("COMPOSE_PROJECT_NAME", name.as_str().unwrap());
+                            } else if name.is_bool() {
+                                env::set_var(
+                                    "COMPOSE_PROJECT_NAME",
+                                    name.as_bool().unwrap().to_string(),
+                                );
+                            } else if name.is_u64() {
+                                env::set_var(
+                                    "COMPOSE_PROJECT_NAME",
+                                    name.as_u64().unwrap().to_string(),
+                                );
+                            } else if name.is_i64() {
+                                env::set_var(
+                                    "COMPOSE_PROJECT_NAME",
+                                    name.as_i64().unwrap().to_string(),
+                                );
+                            } else if name.is_f64() {
+                                env::set_var(
+                                    "COMPOSE_PROJECT_NAME",
+                                    name.as_f64().unwrap().to_string(),
+                                );
+                            }
                         }
                     }
-                }
 
-                serde_yaml::to_string(&interpolate(file)).map(|content| (path, content))
+                    (path, content)
+                })
+                .map_err(Error::from)
+        })
+        .map(|content| {
+            content.and_then(|(path, content)| interpolate(content).map(|content| (path, content)))
+        })
+        .map(|content| {
+            content.and_then(|(path, content)| {
+                serde_yaml::to_string(&content)
+                    .map(|content| (path, content))
+                    .map_err(Error::from)
             })
         })
-        .flat_map(|contents| {
-            contents.map(|(path, content)| {
+        .map(|content| {
+            content.and_then(|(path, content)| {
                 let mut unused = IndexSet::new();
 
                 serde_ignored::deserialize(serde_yaml::Deserializer::from_str(&content), |path| {
