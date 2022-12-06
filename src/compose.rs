@@ -12,6 +12,7 @@ use serde_with::{
 };
 use serde_yaml::Value;
 use std::{convert::Infallible, env, fs, time::Duration};
+use yansi::Paint;
 
 #[skip_serializing_none]
 #[derive(Serialize, Deserialize, Default, Debug)]
@@ -489,7 +490,7 @@ serde_conv!(
         let variables = variables.into_iter().map(|variable| -> Result<_> {
             let mut parts = variable.split('=');
             let key = parts.next().unwrap().to_owned();
-            let value = parts.next().map(|part| part.to_owned()).ok_or_else(|| anyhow!("value not defined for {key}"))?;
+            let value = parts.next().map(|part| part.to_owned()).ok_or_else(|| anyhow!("{key}: value not defined"))?;
 
             Ok((key, value))
         }).collect::<Result<Vec<_>, _>>()?;
@@ -594,7 +595,7 @@ serde_conv!(
                 options = opts;
             }
             _ => {
-                bail!("too many colons in {mount}");
+                bail!("{mount}: too many colons");
             }
         }
 
@@ -628,8 +629,9 @@ serde_conv!(
 
         if !unused.is_empty() {
             eprintln!(
-                "Warning: Unsupported/unknown mount options: {}",
-                unused.into_iter().join(", ")
+                "{} Unsupported/unknown mount options: {}",
+                Paint::yellow("Warning:").bold(),
+                unused.join(", ")
             );
         }
 
@@ -722,8 +724,8 @@ fn evaluate(tokens: Vec<parser::Token>) -> Result<String> {
                 }
                 .or_else(|_| evaluate(tokens)),
                 Some(parser::Var::Err(state, tokens)) => match state {
-                    parser::State::Unset => env::var(name),
-                    parser::State::UnsetOrEmpty => env::var(name).and_then(|var| {
+                    parser::State::Unset => env::var(&name),
+                    parser::State::UnsetOrEmpty => env::var(&name).and_then(|var| {
                         if var.is_empty() {
                             Err(env::VarError::NotPresent)
                         } else {
@@ -731,8 +733,19 @@ fn evaluate(tokens: Vec<parser::Token>) -> Result<String> {
                         }
                     }),
                 }
-                .or_else(|_| evaluate(tokens).and_then(|err| bail!(err))),
-                None => Ok(env::var(name).unwrap_or_default()),
+                .or_else(|_| {
+                    evaluate(tokens).and_then(|err| {
+                        bail!("Required variable \"{name}\" is missing a value: {err}")
+                    })
+                }),
+                None => Ok(env::var(&name).unwrap_or_else(|_| {
+                    eprintln!(
+                        "{} The \"{name}\" variable is not set, defaulting to a blank string",
+                        Paint::yellow("Warning:").bold()
+                    );
+
+                    String::new()
+                })),
             },
         })
         .collect::<Result<Vec<_>, _>>()
@@ -849,13 +862,17 @@ pub(crate) fn parse(paths: Option<Vec<String>>) -> Result<Compose> {
     for (path, file, unused) in files {
         for (name, service) in &file.services {
             if service.build.is_none() && service.image.is_none() {
-                bail!("{path}: service {name} must define either a build section or an image");
+                bail!(
+                    "{path}: service \"{name}\" has neither an image nor a build context specified"
+                );
             }
 
             if service.network_mode.as_deref().unwrap_or_default() == "host"
                 && service.ports.is_some()
             {
-                bail!("{path}: service {name} cannot have port mappings due to host network mode");
+                bail!(
+                    "{path}: service \"{name}\" cannot have port mappings due to host network mode"
+                );
             }
         }
 
@@ -870,7 +887,7 @@ pub(crate) fn parse(paths: Option<Vec<String>>) -> Result<Compose> {
                             || network.internal.is_some()
                             || network.labels.is_some())
                     {
-                        bail!("{path}: network {name} is not managed and should not have other attributes set");
+                        bail!("{path}: conflicting parameters for network \"{name}\"");
                     }
                 }
             }
@@ -884,9 +901,7 @@ pub(crate) fn parse(paths: Option<Vec<String>>) -> Result<Compose> {
                             || volume.driver_opts.is_some()
                             || volume.labels.is_some())
                     {
-                        bail!(
-                            "{path}: volume {name} is not managed and should not have other attributes set"
-                        );
+                        bail!("{path}: conflicting parameters for volume \"{name}\"");
                     }
                 }
             }
@@ -895,9 +910,7 @@ pub(crate) fn parse(paths: Option<Vec<String>>) -> Result<Compose> {
         if let Some(configs) = &file.configs {
             for (name, config) in configs {
                 if config.external.unwrap_or_default() && config.file.is_some() {
-                    bail!(
-                        "{path}: config {name} is not managed and should not have a file specified"
-                    );
+                    bail!("{path}: conflicting parameters for config \"{name}\"");
                 }
             }
         }
@@ -907,14 +920,15 @@ pub(crate) fn parse(paths: Option<Vec<String>>) -> Result<Compose> {
                 if secret.external.unwrap_or_default()
                     && (secret.file.is_some() || secret.environment.is_some())
                 {
-                    bail!("{path}: secret {name} is not managed and should not have other attributes set");
+                    bail!("{path}: conflicting parameters for secret \"{name}\"");
                 }
             }
         }
 
         if !unused.is_empty() {
             eprintln!(
-                "Warning: Unsupported/unknown attributes in {path}: {}",
+                "{} Unsupported/unknown properties in {path}: {}",
+                Paint::yellow("Warning:").bold(),
                 unused.into_iter().join(", ")
             );
         }

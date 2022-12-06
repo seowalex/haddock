@@ -16,3 +16,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `help` command.
 - `version` command.
 - Compose file (de)serialisation.
+- Compose file value interpolation.
