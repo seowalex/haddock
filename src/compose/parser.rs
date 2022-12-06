@@ -1,3 +1,4 @@
+use anyhow::{anyhow, Result};
 use nom::{
     branch::alt,
     bytes::complete::{tag, take_while1},
@@ -5,7 +6,7 @@ use nom::{
     combinator::{all_consuming, cut, eof, map, map_parser, value, verify},
     multi::{fold_many0, many_till},
     sequence::{delimited, preceded, tuple},
-    IResult,
+    Finish, IResult,
 };
 use parse_hyperlinks::take_until_unbalanced;
 
@@ -116,325 +117,267 @@ fn string(input: &str) -> IResult<&str, Vec<Token>> {
     )(input)
 }
 
-pub(crate) fn parse(input: &str) -> IResult<&str, Vec<Token>> {
+pub(crate) fn parse(input: &str) -> Result<Vec<Token>> {
     all_consuming(string)(input)
+        .finish()
+        .map(|(_, tokens)| tokens)
+        .map_err(|_| anyhow!("Invalid interpolation format for \"{input}\""))
 }
 
 #[cfg(test)]
 mod tests {
     use super::{parse, State, Token, Var};
-    use nom::{
-        error::{
-            Error,
-            ErrorKind::{Char, Tag, TakeWhile1},
-        },
-        Err::Failure,
-    };
 
     #[test]
     fn string() {
-        assert_eq!(parse("foo"), Ok(("", vec![Token::Str("foo".to_owned())])));
+        assert_eq!(parse("foo").ok(), Some(vec![Token::Str("foo".to_owned())]));
     }
 
     #[test]
     fn variable() {
         assert_eq!(
-            parse("$foo"),
-            Ok(("", vec![Token::Var("foo".to_owned(), None)]))
+            parse("$foo").ok(),
+            Some(vec![Token::Var("foo".to_owned(), None)])
         );
     }
 
     #[test]
     fn variable_with_leading_string() {
         assert_eq!(
-            parse(" $foo"),
-            Ok((
-                "",
-                vec![
-                    Token::Str(" ".to_owned()),
-                    Token::Var("foo".to_owned(), None)
-                ]
-            ))
+            parse(" $foo").ok(),
+            Some(vec![
+                Token::Str(" ".to_owned()),
+                Token::Var("foo".to_owned(), None)
+            ])
         );
     }
 
     #[test]
     fn variable_with_trailing_string() {
         assert_eq!(
-            parse("$foo "),
-            Ok((
-                "",
-                vec![
-                    Token::Var("foo".to_owned(), None),
-                    Token::Str(" ".to_owned())
-                ]
-            ))
+            parse("$foo ").ok(),
+            Some(vec![
+                Token::Var("foo".to_owned(), None),
+                Token::Str(" ".to_owned())
+            ])
         );
     }
 
     #[test]
     fn variables() {
         assert_eq!(
-            parse("$foo$bar"),
-            Ok((
-                "",
-                vec![
-                    Token::Var("foo".to_owned(), None),
-                    Token::Var("bar".to_owned(), None)
-                ]
-            ))
+            parse("$foo$bar").ok(),
+            Some(vec![
+                Token::Var("foo".to_owned(), None),
+                Token::Var("bar".to_owned(), None)
+            ])
         );
     }
 
     #[test]
     fn variables_with_separating_string() {
         assert_eq!(
-            parse("$foo $bar"),
-            Ok((
-                "",
-                vec![
-                    Token::Var("foo".to_owned(), None),
-                    Token::Str(" ".to_owned()),
-                    Token::Var("bar".to_owned(), None)
-                ]
-            ))
+            parse("$foo $bar").ok(),
+            Some(vec![
+                Token::Var("foo".to_owned(), None),
+                Token::Str(" ".to_owned()),
+                Token::Var("bar".to_owned(), None)
+            ])
         );
     }
 
     #[test]
     fn empty_string() {
-        assert_eq!(parse(""), Ok(("", vec![])));
+        assert_eq!(parse("").ok(), Some(vec![]));
     }
 
     #[test]
     fn escaped_dollar_sign() {
         assert_eq!(
-            parse("$$foo"),
-            Ok(("", vec![Token::Str("$foo".to_string())]))
+            parse("$$foo").ok(),
+            Some(vec![Token::Str("$foo".to_string())])
         );
     }
 
     #[test]
     fn single_dollar_sign() {
         assert_eq!(
-            parse("$"),
-            Err(Failure(Error {
-                input: "",
-                code: Char
-            }))
+            parse("$").err().map(|err| err.to_string()),
+            Some("Invalid interpolation format for \"$\"".to_owned())
         );
     }
 
     #[test]
     fn expanded_variable() {
         assert_eq!(
-            parse("${foo}"),
-            Ok(("", vec![Token::Var("foo".to_owned(), None)]))
+            parse("${foo}").ok(),
+            Some(vec![Token::Var("foo".to_owned(), None)])
         );
     }
 
     #[test]
     fn expanded_variable_with_leading_string() {
         assert_eq!(
-            parse(" ${foo}"),
-            Ok((
-                "",
-                vec![
-                    Token::Str(" ".to_owned()),
-                    Token::Var("foo".to_owned(), None)
-                ]
-            ))
+            parse(" ${foo}").ok(),
+            Some(vec![
+                Token::Str(" ".to_owned()),
+                Token::Var("foo".to_owned(), None)
+            ])
         );
     }
 
     #[test]
     fn expanded_variable_with_trailing_string() {
         assert_eq!(
-            parse("${foo} "),
-            Ok((
-                "",
-                vec![
-                    Token::Var("foo".to_owned(), None),
-                    Token::Str(" ".to_owned())
-                ]
-            ))
+            parse("${foo} ").ok(),
+            Some(vec![
+                Token::Var("foo".to_owned(), None),
+                Token::Str(" ".to_owned())
+            ])
         );
     }
 
     #[test]
     fn expanded_variables() {
         assert_eq!(
-            parse("${foo}${bar}"),
-            Ok((
-                "",
-                vec![
-                    Token::Var("foo".to_owned(), None),
-                    Token::Var("bar".to_owned(), None)
-                ]
-            ))
+            parse("${foo}${bar}").ok(),
+            Some(vec![
+                Token::Var("foo".to_owned(), None),
+                Token::Var("bar".to_owned(), None)
+            ])
         );
     }
 
     #[test]
     fn expanded_variables_with_separating_string() {
         assert_eq!(
-            parse("${foo} ${bar}"),
-            Ok((
-                "",
-                vec![
-                    Token::Var("foo".to_owned(), None),
-                    Token::Str(" ".to_owned()),
-                    Token::Var("bar".to_owned(), None)
-                ]
-            ))
+            parse("${foo} ${bar}").ok(),
+            Some(vec![
+                Token::Var("foo".to_owned(), None),
+                Token::Str(" ".to_owned()),
+                Token::Var("bar".to_owned(), None)
+            ])
         );
     }
 
     #[test]
     fn empty_expanded_variable() {
         assert_eq!(
-            parse("${}"),
-            Err(Failure(Error {
-                input: "",
-                code: TakeWhile1
-            }))
+            parse("${}").err().map(|err| err.to_string()),
+            Some("Invalid interpolation format for \"${}\"".to_owned())
         );
     }
 
     #[test]
     fn expanded_variable_with_default_if_unset_or_empty() {
         assert_eq!(
-            parse("${foo:-bar}"),
-            Ok((
-                "",
-                vec![Token::Var(
-                    "foo".to_owned(),
-                    Some(Var::Default(
-                        State::UnsetOrEmpty,
-                        vec![Token::Str("bar".to_owned())]
-                    ))
-                )]
-            ))
+            parse("${foo:-bar}").ok(),
+            Some(vec![Token::Var(
+                "foo".to_owned(),
+                Some(Var::Default(
+                    State::UnsetOrEmpty,
+                    vec![Token::Str("bar".to_owned())]
+                ))
+            )])
         );
     }
 
     #[test]
     fn expanded_variable_with_default_if_unset() {
         assert_eq!(
-            parse("${foo-bar}"),
-            Ok((
-                "",
-                vec![Token::Var(
-                    "foo".to_owned(),
-                    Some(Var::Default(
-                        State::Unset,
-                        vec![Token::Str("bar".to_owned())]
-                    ))
-                )]
-            ))
+            parse("${foo-bar}").ok(),
+            Some(vec![Token::Var(
+                "foo".to_owned(),
+                Some(Var::Default(
+                    State::Unset,
+                    vec![Token::Str("bar".to_owned())]
+                ))
+            )])
         );
     }
 
     #[test]
     fn expanded_variable_with_error_if_unset_or_empty() {
         assert_eq!(
-            parse("${foo:?bar}"),
-            Ok((
-                "",
-                vec![Token::Var(
-                    "foo".to_owned(),
-                    Some(Var::Err(
-                        State::UnsetOrEmpty,
-                        vec![Token::Str("bar".to_owned())]
-                    ))
-                )]
-            ))
+            parse("${foo:?bar}").ok(),
+            Some(vec![Token::Var(
+                "foo".to_owned(),
+                Some(Var::Err(
+                    State::UnsetOrEmpty,
+                    vec![Token::Str("bar".to_owned())]
+                ))
+            )])
         );
     }
 
     #[test]
     fn expanded_variable_with_error_if_unset() {
         assert_eq!(
-            parse("${foo?bar}"),
-            Ok((
-                "",
-                vec![Token::Var(
-                    "foo".to_owned(),
-                    Some(Var::Err(State::Unset, vec![Token::Str("bar".to_owned())]))
-                )]
-            ))
+            parse("${foo?bar}").ok(),
+            Some(vec![Token::Var(
+                "foo".to_owned(),
+                Some(Var::Err(State::Unset, vec![Token::Str("bar".to_owned())]))
+            )])
         );
     }
 
     #[test]
     fn nested_expanded_variable() {
         assert_eq!(
-            parse("${foo:-${bar}}"),
-            Ok((
-                "",
-                vec![Token::Var(
-                    "foo".to_owned(),
-                    Some(Var::Default(
-                        State::UnsetOrEmpty,
-                        vec![Token::Var("bar".to_owned(), None)]
-                    ))
-                )]
-            ))
+            parse("${foo:-${bar}}").ok(),
+            Some(vec![Token::Var(
+                "foo".to_owned(),
+                Some(Var::Default(
+                    State::UnsetOrEmpty,
+                    vec![Token::Var("bar".to_owned(), None)]
+                ))
+            )])
         );
     }
 
     #[test]
     fn double_nested_expanded_variable() {
         assert_eq!(
-            parse("${foo:-${bar:-${hello}}}"),
-            Ok((
-                "",
-                vec![Token::Var(
-                    "foo".to_owned(),
-                    Some(Var::Default(
-                        State::UnsetOrEmpty,
-                        vec![Token::Var(
-                            "bar".to_owned(),
-                            Some(Var::Default(
-                                State::UnsetOrEmpty,
-                                vec![Token::Var("hello".to_owned(), None)]
-                            ))
-                        )]
-                    ))
-                )]
-            ))
+            parse("${foo:-${bar:-${hello}}}").ok(),
+            Some(vec![Token::Var(
+                "foo".to_owned(),
+                Some(Var::Default(
+                    State::UnsetOrEmpty,
+                    vec![Token::Var(
+                        "bar".to_owned(),
+                        Some(Var::Default(
+                            State::UnsetOrEmpty,
+                            vec![Token::Var("hello".to_owned(), None)]
+                        ))
+                    )]
+                ))
+            )])
         );
     }
 
     #[test]
     fn nested_expanded_variable_with_leading_and_trailing_strings() {
         assert_eq!(
-            parse("${foo:- ${bar} }"),
-            Ok((
-                "",
-                vec![Token::Var(
-                    "foo".to_owned(),
-                    Some(Var::Default(
-                        State::UnsetOrEmpty,
-                        vec![
-                            Token::Str(" ".to_owned()),
-                            Token::Var("bar".to_owned(), None),
-                            Token::Str(" ".to_owned())
-                        ]
-                    ))
-                )]
-            ))
+            parse("${foo:- ${bar} }").ok(),
+            Some(vec![Token::Var(
+                "foo".to_owned(),
+                Some(Var::Default(
+                    State::UnsetOrEmpty,
+                    vec![
+                        Token::Str(" ".to_owned()),
+                        Token::Var("bar".to_owned(), None),
+                        Token::Str(" ".to_owned())
+                    ]
+                ))
+            )])
         );
     }
 
     #[test]
     fn expanded_variable_with_illegal_name() {
         assert_eq!(
-            parse("${foo$}"),
-            Err(Failure(Error {
-                input: "$",
-                code: Tag
-            }))
+            parse("${foo$}").err().map(|err| err.to_string()),
+            Some("Invalid interpolation format for \"${foo$}\"".to_owned())
         );
     }
 }
