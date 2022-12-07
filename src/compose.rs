@@ -975,30 +975,14 @@ pub(crate) fn parse(paths: Option<Vec<String>>) -> Result<Compose> {
 
 #[cfg(test)]
 mod tests {
-    use glob::glob;
-    use std::fs;
-
     use super::Compose;
+    use std::fs;
+    use test_generator::test_resources;
 
-    #[test]
-    fn serde_compose() {
-        let mut all_succeeded = true;
+    #[test_resources("tests/fixtures/**/*.y*ml")]
+    fn serde_compose(resource: &str) {
+        let contents = fs::read_to_string(resource).unwrap();
 
-        for entry in glob("tests/fixtures/**/*.y*ml")
-            .expect("Failed to read glob pattern")
-            .filter_map(Result::ok)
-        {
-            let contents = fs::read_to_string(&entry).unwrap();
-
-            match serde_yaml::from_str::<Compose>(&contents) {
-                Ok(_) => {}
-                Err(e) => {
-                    all_succeeded = false;
-                    eprintln!("{}: {:?}", entry.display(), e);
-                }
-            }
-        }
-
-        assert!(all_succeeded);
+        assert!(serde_yaml::from_str::<Compose>(&contents).is_ok());
     }
 }
