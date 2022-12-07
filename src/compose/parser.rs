@@ -121,6 +121,7 @@ pub(crate) fn parse(input: &str) -> Result<Vec<Token>> {
     all_consuming(string)(input)
         .finish()
         .map(|(_, tokens)| tokens)
+        // TODO: Better error messages
         .map_err(|_| anyhow!("Invalid interpolation format for \"{input}\""))
 }
 
