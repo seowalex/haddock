@@ -130,14 +130,17 @@ mod tests {
 
     #[test]
     fn string() {
-        assert_eq!(parse("foo").ok(), Some(vec![Token::Str("foo".to_owned())]));
+        assert_eq!(
+            parse("foo").ok(),
+            Some(vec![Token::Str(String::from("foo"))])
+        );
     }
 
     #[test]
     fn variable() {
         assert_eq!(
             parse("$foo").ok(),
-            Some(vec![Token::Var("foo".to_owned(), None)])
+            Some(vec![Token::Var(String::from("foo"), None)])
         );
     }
 
@@ -146,8 +149,8 @@ mod tests {
         assert_eq!(
             parse(" $foo").ok(),
             Some(vec![
-                Token::Str(" ".to_owned()),
-                Token::Var("foo".to_owned(), None)
+                Token::Str(String::from(" ")),
+                Token::Var(String::from("foo"), None)
             ])
         );
     }
@@ -157,8 +160,8 @@ mod tests {
         assert_eq!(
             parse("$foo ").ok(),
             Some(vec![
-                Token::Var("foo".to_owned(), None),
-                Token::Str(" ".to_owned())
+                Token::Var(String::from("foo"), None),
+                Token::Str(String::from(" "))
             ])
         );
     }
@@ -168,8 +171,8 @@ mod tests {
         assert_eq!(
             parse("$foo$bar").ok(),
             Some(vec![
-                Token::Var("foo".to_owned(), None),
-                Token::Var("bar".to_owned(), None)
+                Token::Var(String::from("foo"), None),
+                Token::Var(String::from("bar"), None)
             ])
         );
     }
@@ -179,9 +182,9 @@ mod tests {
         assert_eq!(
             parse("$foo $bar").ok(),
             Some(vec![
-                Token::Var("foo".to_owned(), None),
-                Token::Str(" ".to_owned()),
-                Token::Var("bar".to_owned(), None)
+                Token::Var(String::from("foo"), None),
+                Token::Str(String::from(" ")),
+                Token::Var(String::from("bar"), None)
             ])
         );
     }
@@ -195,7 +198,7 @@ mod tests {
     fn escaped_dollar_sign() {
         assert_eq!(
             parse("$$foo").ok(),
-            Some(vec![Token::Str("$foo".to_string())])
+            Some(vec![Token::Str(String::from("$foo"))])
         );
     }
 
@@ -203,7 +206,7 @@ mod tests {
     fn single_dollar_sign() {
         assert_eq!(
             parse("$").err().map(|err| err.to_string()),
-            Some("Invalid interpolation format for \"$\"".to_owned())
+            Some(String::from("Invalid interpolation format for \"$\""))
         );
     }
 
@@ -211,7 +214,7 @@ mod tests {
     fn expanded_variable() {
         assert_eq!(
             parse("${foo}").ok(),
-            Some(vec![Token::Var("foo".to_owned(), None)])
+            Some(vec![Token::Var(String::from("foo"), None)])
         );
     }
 
@@ -220,8 +223,8 @@ mod tests {
         assert_eq!(
             parse(" ${foo}").ok(),
             Some(vec![
-                Token::Str(" ".to_owned()),
-                Token::Var("foo".to_owned(), None)
+                Token::Str(String::from(" ")),
+                Token::Var(String::from("foo"), None)
             ])
         );
     }
@@ -231,8 +234,8 @@ mod tests {
         assert_eq!(
             parse("${foo} ").ok(),
             Some(vec![
-                Token::Var("foo".to_owned(), None),
-                Token::Str(" ".to_owned())
+                Token::Var(String::from("foo"), None),
+                Token::Str(String::from(" "))
             ])
         );
     }
@@ -242,8 +245,8 @@ mod tests {
         assert_eq!(
             parse("${foo}${bar}").ok(),
             Some(vec![
-                Token::Var("foo".to_owned(), None),
-                Token::Var("bar".to_owned(), None)
+                Token::Var(String::from("foo"), None),
+                Token::Var(String::from("bar"), None)
             ])
         );
     }
@@ -253,9 +256,9 @@ mod tests {
         assert_eq!(
             parse("${foo} ${bar}").ok(),
             Some(vec![
-                Token::Var("foo".to_owned(), None),
-                Token::Str(" ".to_owned()),
-                Token::Var("bar".to_owned(), None)
+                Token::Var(String::from("foo"), None),
+                Token::Str(String::from(" ")),
+                Token::Var(String::from("bar"), None)
             ])
         );
     }
@@ -264,7 +267,7 @@ mod tests {
     fn empty_expanded_variable() {
         assert_eq!(
             parse("${}").err().map(|err| err.to_string()),
-            Some("Invalid interpolation format for \"${}\"".to_owned())
+            Some(String::from("Invalid interpolation format for \"${}\""))
         );
     }
 
@@ -273,10 +276,10 @@ mod tests {
         assert_eq!(
             parse("${foo:-bar}").ok(),
             Some(vec![Token::Var(
-                "foo".to_owned(),
+                String::from("foo"),
                 Some(Var::Default(
                     State::UnsetOrEmpty,
-                    vec![Token::Str("bar".to_owned())]
+                    vec![Token::Str(String::from("bar"))]
                 ))
             )])
         );
@@ -287,10 +290,10 @@ mod tests {
         assert_eq!(
             parse("${foo-bar}").ok(),
             Some(vec![Token::Var(
-                "foo".to_owned(),
+                String::from("foo"),
                 Some(Var::Default(
                     State::Unset,
-                    vec![Token::Str("bar".to_owned())]
+                    vec![Token::Str(String::from("bar"))]
                 ))
             )])
         );
@@ -301,10 +304,10 @@ mod tests {
         assert_eq!(
             parse("${foo:?bar}").ok(),
             Some(vec![Token::Var(
-                "foo".to_owned(),
+                String::from("foo"),
                 Some(Var::Err(
                     State::UnsetOrEmpty,
-                    vec![Token::Str("bar".to_owned())]
+                    vec![Token::Str(String::from("bar"))]
                 ))
             )])
         );
@@ -315,8 +318,11 @@ mod tests {
         assert_eq!(
             parse("${foo?bar}").ok(),
             Some(vec![Token::Var(
-                "foo".to_owned(),
-                Some(Var::Err(State::Unset, vec![Token::Str("bar".to_owned())]))
+                String::from("foo"),
+                Some(Var::Err(
+                    State::Unset,
+                    vec![Token::Str(String::from("bar"))]
+                ))
             )])
         );
     }
@@ -326,10 +332,10 @@ mod tests {
         assert_eq!(
             parse("${foo:-${bar}}").ok(),
             Some(vec![Token::Var(
-                "foo".to_owned(),
+                String::from("foo"),
                 Some(Var::Default(
                     State::UnsetOrEmpty,
-                    vec![Token::Var("bar".to_owned(), None)]
+                    vec![Token::Var(String::from("bar"), None)]
                 ))
             )])
         );
@@ -340,14 +346,14 @@ mod tests {
         assert_eq!(
             parse("${foo:-${bar:-${hello}}}").ok(),
             Some(vec![Token::Var(
-                "foo".to_owned(),
+                String::from("foo"),
                 Some(Var::Default(
                     State::UnsetOrEmpty,
                     vec![Token::Var(
-                        "bar".to_owned(),
+                        String::from("bar"),
                         Some(Var::Default(
                             State::UnsetOrEmpty,
-                            vec![Token::Var("hello".to_owned(), None)]
+                            vec![Token::Var(String::from("hello"), None)]
                         ))
                     )]
                 ))
@@ -360,13 +366,13 @@ mod tests {
         assert_eq!(
             parse("${foo:- ${bar} }").ok(),
             Some(vec![Token::Var(
-                "foo".to_owned(),
+                String::from("foo"),
                 Some(Var::Default(
                     State::UnsetOrEmpty,
                     vec![
-                        Token::Str(" ".to_owned()),
-                        Token::Var("bar".to_owned(), None),
-                        Token::Str(" ".to_owned())
+                        Token::Str(String::from(" ")),
+                        Token::Var(String::from("bar"), None),
+                        Token::Str(String::from(" "))
                     ]
                 ))
             )])
@@ -377,7 +383,7 @@ mod tests {
     fn expanded_variable_with_illegal_name() {
         assert_eq!(
             parse("${foo$}").err().map(|err| err.to_string()),
-            Some("Invalid interpolation format for \"${foo$}\"".to_owned())
+            Some(String::from("Invalid interpolation format for \"${foo$}\""))
         );
     }
 }

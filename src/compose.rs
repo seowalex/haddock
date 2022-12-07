@@ -735,7 +735,11 @@ fn evaluate(tokens: Vec<parser::Token>) -> Result<String> {
                 }
                 .or_else(|_| {
                     evaluate(tokens).and_then(|err| {
-                        bail!("Required variable \"{name}\" is missing a value: {err}")
+                        if err.is_empty() {
+                            bail!("Required variable \"{name}\" is missing a value")
+                        } else {
+                            bail!("Required variable \"{name}\" is missing a value: {err}")
+                        }
                     })
                 }),
                 None => Ok(env::var(&name).unwrap_or_else(|_| {
@@ -779,17 +783,18 @@ pub(crate) fn parse(paths: Option<Vec<String>>) -> Result<Compose> {
             })
             .collect::<Result<Vec<_>, _>>()?,
         None => vec![fs::read_to_string("compose.yaml")
-            .map(|content| ("compose.yaml".to_owned(), content))
+            .map(|content| (String::from("compose.yaml"), content))
             .or_else(|_| {
-                fs::read_to_string("compose.yml").map(|content| ("compose.yml".to_owned(), content))
+                fs::read_to_string("compose.yml")
+                    .map(|content| (String::from("compose.yml"), content))
             })
             .or_else(|_| {
                 fs::read_to_string("docker-compose.yaml")
-                    .map(|content| ("docker-compose.yaml".to_owned(), content))
+                    .map(|content| (String::from("docker-compose.yaml"), content))
             })
             .or_else(|_| {
                 fs::read_to_string("docker-compose.yml")
-                    .map(|content| ("docker-compose.yml".to_owned(), content))
+                    .map(|content| (String::from("docker-compose.yml"), content))
             })
             .context("compose.yaml not found")?],
     };
@@ -975,7 +980,8 @@ pub(crate) fn parse(paths: Option<Vec<String>>) -> Result<Compose> {
 
 #[cfg(test)]
 mod tests {
-    use super::Compose;
+    use super::{interpolate, Compose};
+    use serde_yaml::Value;
     use std::fs;
     use test_generator::test_resources;
 
@@ -984,5 +990,132 @@ mod tests {
         let contents = fs::read_to_string(resource).unwrap();
 
         assert!(serde_yaml::from_str::<Compose>(&contents).is_ok());
+    }
+
+    #[test]
+    fn simple_named() {
+        let result = temp_env::with_var("VAR", Some("woop"), || {
+            interpolate(Value::String(String::from("$VAR")))
+        });
+
+        assert_eq!(result.ok(), Some(Value::String(String::from("woop"))));
+    }
+
+    #[test]
+    fn simple_named_missing() {
+        let result = temp_env::with_var("VAR", None::<&str>, || {
+            interpolate(Value::String(String::from("pre $VAR post")))
+        });
+
+        assert_eq!(result.ok(), Some(Value::String(String::from("pre  post"))));
+    }
+
+    #[test]
+    fn braced_named() {
+        let result = temp_env::with_var("VAR", Some("woop"), || {
+            interpolate(Value::String(String::from("${VAR}")))
+        });
+
+        assert_eq!(result.ok(), Some(Value::String(String::from("woop"))));
+    }
+
+    #[test]
+    fn braced_named_text() {
+        let result = temp_env::with_var("VAR", Some("woop"), || {
+            interpolate(Value::String(String::from("pre ${VAR} post")))
+        });
+
+        assert_eq!(
+            result.ok(),
+            Some(Value::String(String::from("pre woop post")))
+        );
+    }
+
+    #[test]
+    fn default_named() {
+        let result = temp_env::with_var("VAR", None::<&str>, || {
+            interpolate(Value::String(String::from("${VAR-default}")))
+        });
+
+        assert_eq!(result.ok(), Some(Value::String(String::from("default"))));
+    }
+
+    #[test]
+    fn default_pattern() {
+        let result = temp_env::with_var("DEF", Some("woop"), || {
+            interpolate(Value::String(String::from("${VAR-$DEF}")))
+        });
+
+        assert_eq!(result.ok(), Some(Value::String(String::from("woop"))));
+    }
+
+    #[test]
+    fn default_named_no_empty() {
+        let result = temp_env::with_var("VAR", Some(""), || {
+            interpolate(Value::String(String::from("${VAR:-default}")))
+        });
+
+        assert_eq!(result.ok(), Some(Value::String(String::from("default"))));
+    }
+
+    #[test]
+    fn default_pattern_no_empty() {
+        let result = temp_env::with_vars(vec![("VAR", Some("")), ("DEF", Some("woop"))], || {
+            interpolate(Value::String(String::from("${VAR:-$DEF}")))
+        });
+
+        assert_eq!(result.ok(), Some(Value::String(String::from("woop"))));
+    }
+
+    #[test]
+    fn error_named() {
+        let result = temp_env::with_var("VAR", None::<&str>, || {
+            interpolate(Value::String(String::from("${VAR?msg}")))
+        });
+
+        assert_eq!(
+            result.err().map(|err| err.to_string()),
+            Some(String::from(
+                "Required variable \"VAR\" is missing a value: msg"
+            ))
+        );
+    }
+
+    #[test]
+    fn error_named_no_empty() {
+        let result = temp_env::with_var("VAR", Some(""), || {
+            interpolate(Value::String(String::from("${VAR:?msg}")))
+        });
+
+        assert_eq!(
+            result.err().map(|err| err.to_string()),
+            Some(String::from(
+                "Required variable \"VAR\" is missing a value: msg"
+            ))
+        );
+    }
+
+    #[test]
+    fn error_no_message() {
+        let result = temp_env::with_var("VAR", None::<&str>, || {
+            interpolate(Value::String(String::from("${VAR?}")))
+        });
+
+        assert_eq!(
+            result.err().map(|err| err.to_string()),
+            Some(String::from("Required variable \"VAR\" is missing a value"))
+        );
+    }
+
+    #[test]
+    fn error_no_message_no_empty() {
+        let result = temp_env::with_var("VAR", Some(""), || {
+            interpolate(Value::String(String::from("${VAR:?}")))
+        });
+
+        assert_eq!(
+            result.err().map(|err| err.to_string()),
+            Some(String::from("Required variable \"VAR\" is missing a value"))
+        );
     }
 }

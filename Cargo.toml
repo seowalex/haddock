@@ -21,4 +21,5 @@ serde_yaml = "0.9.14"
 yansi = "0.5.1"
 
 [dev-dependencies]
+temp-env = "0.3.1"
 test-generator = "0.3.0"
