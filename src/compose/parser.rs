@@ -20,12 +20,13 @@ pub(crate) enum Token {
 pub(crate) enum Var {
     Default(State, Vec<Token>),
     Err(State, Vec<Token>),
+    Replace(State, Vec<Token>),
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub(crate) enum State {
-    Unset,
-    UnsetOrEmpty,
+    Set,
+    SetAndNonEmpty,
 }
 
 fn dollar_or_variable(input: &str) -> IResult<&str, Token> {
@@ -59,17 +60,26 @@ fn parameter_expanded(input: &str) -> IResult<&str, Token> {
     map(
         all_consuming(tuple((
             name,
-            alt((tag(":-"), tag("-"), tag(":?"), tag("?"))),
+            alt((
+                tag(":-"),
+                tag("-"),
+                tag(":?"),
+                tag("?"),
+                tag(":+"),
+                tag("+"),
+            )),
             string,
         ))),
         |(name, separator, tokens)| {
             Token::Var(
                 name.to_owned(),
                 match separator {
-                    ":-" => Some(Var::Default(State::UnsetOrEmpty, tokens)),
-                    "-" => Some(Var::Default(State::Unset, tokens)),
-                    ":?" => Some(Var::Err(State::UnsetOrEmpty, tokens)),
-                    "?" => Some(Var::Err(State::Unset, tokens)),
+                    ":-" => Some(Var::Default(State::SetAndNonEmpty, tokens)),
+                    "-" => Some(Var::Default(State::Set, tokens)),
+                    ":?" => Some(Var::Err(State::SetAndNonEmpty, tokens)),
+                    "?" => Some(Var::Err(State::Set, tokens)),
+                    ":+" => Some(Var::Replace(State::SetAndNonEmpty, tokens)),
+                    "+" => Some(Var::Replace(State::Set, tokens)),
                     _ => None,
                 },
             )
@@ -278,7 +288,7 @@ mod tests {
             Some(vec![Token::Var(
                 String::from("foo"),
                 Some(Var::Default(
-                    State::UnsetOrEmpty,
+                    State::SetAndNonEmpty,
                     vec![Token::Str(String::from("bar"))]
                 ))
             )])
@@ -292,7 +302,7 @@ mod tests {
             Some(vec![Token::Var(
                 String::from("foo"),
                 Some(Var::Default(
-                    State::Unset,
+                    State::Set,
                     vec![Token::Str(String::from("bar"))]
                 ))
             )])
@@ -306,7 +316,7 @@ mod tests {
             Some(vec![Token::Var(
                 String::from("foo"),
                 Some(Var::Err(
-                    State::UnsetOrEmpty,
+                    State::SetAndNonEmpty,
                     vec![Token::Str(String::from("bar"))]
                 ))
             )])
@@ -319,8 +329,33 @@ mod tests {
             parse("${foo?bar}").ok(),
             Some(vec![Token::Var(
                 String::from("foo"),
-                Some(Var::Err(
-                    State::Unset,
+                Some(Var::Err(State::Set, vec![Token::Str(String::from("bar"))]))
+            )])
+        );
+    }
+
+    #[test]
+    fn expanded_variable_with_replacement_if_set_and_non_empty() {
+        assert_eq!(
+            parse("${foo:+bar}").ok(),
+            Some(vec![Token::Var(
+                String::from("foo"),
+                Some(Var::Replace(
+                    State::SetAndNonEmpty,
+                    vec![Token::Str(String::from("bar"))]
+                ))
+            )])
+        );
+    }
+
+    #[test]
+    fn expanded_variable_with_replacement_if_set() {
+        assert_eq!(
+            parse("${foo+bar}").ok(),
+            Some(vec![Token::Var(
+                String::from("foo"),
+                Some(Var::Replace(
+                    State::Set,
                     vec![Token::Str(String::from("bar"))]
                 ))
             )])
@@ -334,7 +369,7 @@ mod tests {
             Some(vec![Token::Var(
                 String::from("foo"),
                 Some(Var::Default(
-                    State::UnsetOrEmpty,
+                    State::SetAndNonEmpty,
                     vec![Token::Var(String::from("bar"), None)]
                 ))
             )])
@@ -348,11 +383,11 @@ mod tests {
             Some(vec![Token::Var(
                 String::from("foo"),
                 Some(Var::Default(
-                    State::UnsetOrEmpty,
+                    State::SetAndNonEmpty,
                     vec![Token::Var(
                         String::from("bar"),
                         Some(Var::Default(
-                            State::UnsetOrEmpty,
+                            State::SetAndNonEmpty,
                             vec![Token::Var(String::from("hello"), None)]
                         ))
                     )]
@@ -368,7 +403,7 @@ mod tests {
             Some(vec![Token::Var(
                 String::from("foo"),
                 Some(Var::Default(
-                    State::UnsetOrEmpty,
+                    State::SetAndNonEmpty,
                     vec![
                         Token::Str(String::from(" ")),
                         Token::Var(String::from("bar"), None),

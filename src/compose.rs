@@ -18,8 +18,8 @@ fn evaluate(tokens: Vec<parser::Token>) -> Result<String> {
             parser::Token::Str(string) => Ok(string),
             parser::Token::Var(name, var) => match var {
                 Some(parser::Var::Default(state, tokens)) => match state {
-                    parser::State::Unset => env::var(name),
-                    parser::State::UnsetOrEmpty => env::var(name).and_then(|var| {
+                    parser::State::Set => env::var(name),
+                    parser::State::SetAndNonEmpty => env::var(name).and_then(|var| {
                         if var.is_empty() {
                             Err(env::VarError::NotPresent)
                         } else {
@@ -29,8 +29,8 @@ fn evaluate(tokens: Vec<parser::Token>) -> Result<String> {
                 }
                 .or_else(|_| evaluate(tokens)),
                 Some(parser::Var::Err(state, tokens)) => match state {
-                    parser::State::Unset => env::var(&name),
-                    parser::State::UnsetOrEmpty => env::var(&name).and_then(|var| {
+                    parser::State::Set => env::var(&name),
+                    parser::State::SetAndNonEmpty => env::var(&name).and_then(|var| {
                         if var.is_empty() {
                             Err(env::VarError::NotPresent)
                         } else {
@@ -47,6 +47,24 @@ fn evaluate(tokens: Vec<parser::Token>) -> Result<String> {
                         }
                     })
                 }),
+                Some(parser::Var::Replace(state, tokens)) => {
+                    if match state {
+                        parser::State::Set => env::var(name),
+                        parser::State::SetAndNonEmpty => env::var(name).and_then(|var| {
+                            if var.is_empty() {
+                                Err(env::VarError::NotPresent)
+                            } else {
+                                Ok(var)
+                            }
+                        }),
+                    }
+                    .is_ok()
+                    {
+                        evaluate(tokens)
+                    } else {
+                        Ok(String::new())
+                    }
+                }
                 None => Ok(env::var(&name).unwrap_or_else(|_| {
                     eprintln!(
                         "{} The \"{name}\" variable is not set, defaulting to a blank string",
@@ -348,6 +366,15 @@ mod tests {
     }
 
     #[test]
+    fn no_default_named() {
+        let result = temp_env::with_var("VAR", Some("woop"), || {
+            interpolate(Value::String(String::from("${VAR-default}")))
+        });
+
+        assert_eq!(result.ok(), Some(Value::String(String::from("woop"))));
+    }
+
+    #[test]
     fn default_pattern() {
         let result = temp_env::with_var("DEF", Some("woop"), || {
             interpolate(Value::String(String::from("${VAR-$DEF}")))
@@ -363,6 +390,15 @@ mod tests {
         });
 
         assert_eq!(result.ok(), Some(Value::String(String::from("default"))));
+    }
+
+    #[test]
+    fn no_default_named_no_empty() {
+        let result = temp_env::with_var("VAR", Some("woop"), || {
+            interpolate(Value::String(String::from("${VAR:-default}")))
+        });
+
+        assert_eq!(result.ok(), Some(Value::String(String::from("woop"))));
     }
 
     #[test]
@@ -424,5 +460,47 @@ mod tests {
             result.err().map(|err| err.to_string()),
             Some(String::from("Required variable \"VAR\" is missing a value"))
         );
+    }
+
+    #[test]
+    fn replacement_named() {
+        let result = temp_env::with_var("VAR", Some(""), || {
+            interpolate(Value::String(String::from("${VAR+replacement}")))
+        });
+
+        assert_eq!(
+            result.ok(),
+            Some(Value::String(String::from("replacement")))
+        );
+    }
+
+    #[test]
+    fn no_replacement_named() {
+        let result = temp_env::with_var("VAR", None::<&str>, || {
+            interpolate(Value::String(String::from("${VAR+replacement}")))
+        });
+
+        assert_eq!(result.ok(), Some(Value::String(String::new())));
+    }
+
+    #[test]
+    fn replacement_named_no_empty() {
+        let result = temp_env::with_var("VAR", Some("woop"), || {
+            interpolate(Value::String(String::from("${VAR:+replacement}")))
+        });
+
+        assert_eq!(
+            result.ok(),
+            Some(Value::String(String::from("replacement")))
+        );
+    }
+
+    #[test]
+    fn no_replacement_named_no_empty() {
+        let result = temp_env::with_var("VAR", Some(""), || {
+            interpolate(Value::String(String::from("${VAR:+replacement}")))
+        });
+
+        assert_eq!(result.ok(), Some(Value::String(String::new())));
     }
 }
