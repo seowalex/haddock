@@ -3,7 +3,7 @@ use clap::ValueEnum;
 use indexmap::IndexSet;
 use std::fs;
 
-use crate::compose;
+use crate::{compose, Flags};
 
 /// Converts the compose file to platform's canonical format
 #[derive(clap::Args, Debug)]
@@ -38,8 +38,8 @@ enum Format {
     Json,
 }
 
-pub(crate) fn run(args: Args, paths: Option<Vec<String>>) -> Result<()> {
-    let file = compose::parse(paths)?;
+pub(crate) fn run(args: Args, flags: Flags) -> Result<()> {
+    let file = compose::parse(flags)?;
 
     if !args.quiet {
         if args.services {

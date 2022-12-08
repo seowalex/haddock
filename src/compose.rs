@@ -8,6 +8,7 @@ use serde_yaml::Value;
 use std::{env, fs};
 use yansi::Paint;
 
+use crate::Flags;
 use types::Compose;
 
 fn evaluate(tokens: Vec<parser::Token>) -> Result<String> {
@@ -77,8 +78,8 @@ fn interpolate(mut value: Value) -> Result<Value> {
     Ok(value)
 }
 
-pub(crate) fn parse(paths: Option<Vec<String>>) -> Result<Compose> {
-    let contents = match paths {
+pub(crate) fn parse(flags: Flags) -> Result<Compose> {
+    let contents = match flags.file {
         Some(paths) => paths
             .into_iter()
             .map(|path| {
