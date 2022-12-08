@@ -701,3 +701,18 @@ pub(crate) struct Secret {
     pub(crate) external: Option<bool>,
     pub(crate) name: Option<String>,
 }
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+    use test_generator::test_resources;
+
+    use super::Compose;
+
+    #[test_resources("tests/fixtures/**/*.y*ml")]
+    fn serde(resource: &str) {
+        let contents = fs::read_to_string(resource).unwrap();
+
+        assert!(serde_yaml::from_str::<Compose>(&contents).is_ok());
+    }
+}

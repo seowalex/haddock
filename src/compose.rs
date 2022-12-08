@@ -284,17 +284,9 @@ pub(crate) fn parse(paths: Option<Vec<String>>) -> Result<Compose> {
 
 #[cfg(test)]
 mod tests {
-    use super::{interpolate, Compose};
     use serde_yaml::Value;
-    use std::fs;
-    use test_generator::test_resources;
 
-    #[test_resources("tests/fixtures/**/*.y*ml")]
-    fn serde_compose(resource: &str) {
-        let contents = fs::read_to_string(resource).unwrap();
-
-        assert!(serde_yaml::from_str::<Compose>(&contents).is_ok());
-    }
+    use super::interpolate;
 
     #[test]
     fn simple_named() {
