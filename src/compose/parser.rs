@@ -121,8 +121,7 @@ pub(crate) fn parse(input: &str) -> Result<Vec<Token>> {
     all_consuming(string)(input)
         .finish()
         .map(|(_, tokens)| tokens)
-        // TODO: Better error messages
-        .map_err(|_| anyhow!("Invalid interpolation format for \"{input}\""))
+        .map_err(|_| anyhow!("invalid interpolation format for \"{input}\""))
 }
 
 #[cfg(test)]
@@ -207,7 +206,7 @@ mod tests {
     fn single_dollar_sign() {
         assert_eq!(
             parse("$").err().map(|err| err.to_string()),
-            Some(String::from("Invalid interpolation format for \"$\""))
+            Some(String::from("invalid interpolation format for \"$\""))
         );
     }
 
@@ -268,7 +267,7 @@ mod tests {
     fn empty_expanded_variable() {
         assert_eq!(
             parse("${}").err().map(|err| err.to_string()),
-            Some(String::from("Invalid interpolation format for \"${}\""))
+            Some(String::from("invalid interpolation format for \"${}\""))
         );
     }
 
@@ -384,7 +383,7 @@ mod tests {
     fn expanded_variable_with_illegal_name() {
         assert_eq!(
             parse("${foo$}").err().map(|err| err.to_string()),
-            Some(String::from("Invalid interpolation format for \"${foo$}\""))
+            Some(String::from("invalid interpolation format for \"${foo$}\""))
         );
     }
 }

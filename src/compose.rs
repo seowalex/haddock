@@ -1,7 +1,7 @@
 mod parser;
 mod types;
 
-use anyhow::{bail, Context, Error, Result};
+use anyhow::{anyhow, bail, Context, Error, Result};
 use indexmap::IndexSet;
 use itertools::Itertools;
 use serde_yaml::Value;
@@ -68,8 +68,9 @@ fn interpolate(mut value: Value) -> Result<Value> {
             *value = interpolate(value.to_owned())?;
         }
     } else if let Some(values) = value.as_mapping_mut() {
-        for value in values.values_mut() {
-            *value = interpolate(value.to_owned())?;
+        for (key, value) in values.into_iter() {
+            *value = interpolate(value.to_owned())
+                .with_context(|| key.as_str().unwrap_or_default().to_owned())?;
         }
     }
 
@@ -145,7 +146,16 @@ pub(crate) fn parse(paths: Option<Vec<String>>) -> Result<Compose> {
                 .map_err(Error::from)
         })
         .map(|content| {
-            content.and_then(|(path, content)| interpolate(content).map(|content| (path, content)))
+            content.and_then(|(path, content)| {
+                interpolate(content)
+                    .map(|content| (path, content))
+                    .map_err(|err| match err.chain().collect::<Vec<_>>().split_last() {
+                        Some((err, props)) => {
+                            anyhow!("{}: {err}", props.iter().join("."))
+                        }
+                        None => err,
+                    })
+            })
         })
         .map(|content| {
             content.and_then(|(path, content)| {
