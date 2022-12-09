@@ -8,7 +8,7 @@ use serde_yaml::Value;
 use std::{env, fs};
 use yansi::Paint;
 
-use crate::Flags;
+use crate::Config;
 use types::Compose;
 
 fn evaluate(tokens: Vec<parser::Token>) -> Result<String> {
@@ -96,8 +96,8 @@ fn interpolate(mut value: Value) -> Result<Value> {
     Ok(value)
 }
 
-pub(crate) fn parse(flags: Flags) -> Result<Compose> {
-    let contents = match flags.file {
+pub(crate) fn parse(config: Config) -> Result<Compose> {
+    let contents = match config.file {
         Some(paths) => paths
             .into_iter()
             .map(|path| {

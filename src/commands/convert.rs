@@ -3,7 +3,7 @@ use clap::ValueEnum;
 use indexmap::IndexSet;
 use std::fs;
 
-use crate::{compose, Flags};
+use crate::{compose, Config};
 
 /// Converts the compose file to platform's canonical format
 #[derive(clap::Args, Debug)]
@@ -12,21 +12,27 @@ pub(crate) struct Args {
     /// Format the output
     #[arg(long, value_enum, default_value_t = Format::Yaml)]
     format: Format,
+
     /// Only validate the configuration, don't print anything
     #[arg(short, long)]
     quiet: bool,
+
     /// Print the service names, one per line
     #[arg(long)]
     services: bool,
+
     /// Print the volume names, one per line
     #[arg(long)]
     volumes: bool,
+
     /// Print the profile names, one per line
     #[arg(long)]
     profiles: bool,
+
     /// Print the image names, one per line
     #[arg(long)]
     images: bool,
+
     /// Save to file (default to stdout)
     #[arg(short, long)]
     output: Option<String>,
@@ -38,8 +44,8 @@ enum Format {
     Json,
 }
 
-pub(crate) fn run(args: Args, flags: Flags) -> Result<()> {
-    let file = compose::parse(flags)?;
+pub(crate) fn run(args: Args, config: Config) -> Result<()> {
+    let file = compose::parse(config)?;
 
     if !args.quiet {
         if args.services {

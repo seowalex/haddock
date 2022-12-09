@@ -9,6 +9,7 @@ pub(crate) struct Args {
     /// Format the output
     #[arg(short, long, value_enum, default_value_t = Format::Pretty)]
     format: Format,
+
     /// Show only the version number
     #[arg(long)]
     short: bool,

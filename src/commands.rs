@@ -4,23 +4,17 @@ mod version;
 use anyhow::Result;
 use clap::Subcommand;
 
-use crate::Flags;
+use crate::Config;
 
 #[derive(Subcommand, Debug)]
 pub(crate) enum Command {
-    /// Create and start containers
-    Up,
-    /// Stop and remove containers, networks
-    Down,
     Convert(convert::Args),
     Version(version::Args),
 }
 
-pub(crate) fn run(command: Command, flags: Flags) -> Result<()> {
+pub(crate) fn run(command: Command, config: Config) -> Result<()> {
     match command {
-        Command::Up => todo!(),
-        Command::Down => todo!(),
-        Command::Convert(args) => convert::run(args, flags),
+        Command::Convert(args) => convert::run(args, config),
         Command::Version(args) => version::run(args),
     }?;
 
