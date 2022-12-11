@@ -9,17 +9,18 @@ use std::{env, fs};
 use yansi::Paint;
 
 use crate::Config;
+use parser::{State, Token, Var};
 use types::Compose;
 
-fn evaluate(tokens: Vec<parser::Token>) -> Result<String> {
+fn evaluate(tokens: Vec<Token>) -> Result<String> {
     tokens
         .into_iter()
         .map(|token| match token {
-            parser::Token::Str(string) => Ok(string),
-            parser::Token::Var(name, var) => match var {
-                Some(parser::Var::Default(state, tokens)) => match state {
-                    parser::State::Set => env::var(name),
-                    parser::State::SetAndNonEmpty => env::var(name).and_then(|var| {
+            Token::Str(string) => Ok(string),
+            Token::Var(name, var) => match var {
+                Some(Var::Default(state, tokens)) => match state {
+                    State::Set => env::var(name),
+                    State::SetAndNonEmpty => env::var(name).and_then(|var| {
                         if var.is_empty() {
                             Err(env::VarError::NotPresent)
                         } else {
@@ -28,9 +29,9 @@ fn evaluate(tokens: Vec<parser::Token>) -> Result<String> {
                     }),
                 }
                 .or_else(|_| evaluate(tokens)),
-                Some(parser::Var::Err(state, tokens)) => match state {
-                    parser::State::Set => env::var(&name),
-                    parser::State::SetAndNonEmpty => env::var(&name).and_then(|var| {
+                Some(Var::Err(state, tokens)) => match state {
+                    State::Set => env::var(&name),
+                    State::SetAndNonEmpty => env::var(&name).and_then(|var| {
                         if var.is_empty() {
                             Err(env::VarError::NotPresent)
                         } else {
@@ -47,10 +48,10 @@ fn evaluate(tokens: Vec<parser::Token>) -> Result<String> {
                         }
                     })
                 }),
-                Some(parser::Var::Replace(state, tokens)) => {
+                Some(Var::Replace(state, tokens)) => {
                     if match state {
-                        parser::State::Set => env::var(name),
-                        parser::State::SetAndNonEmpty => env::var(name).and_then(|var| {
+                        State::Set => env::var(name),
+                        State::SetAndNonEmpty => env::var(name).and_then(|var| {
                             if var.is_empty() {
                                 Err(env::VarError::NotPresent)
                             } else {
@@ -88,8 +89,8 @@ fn interpolate(mut value: Value) -> Result<Value> {
         }
     } else if let Some(values) = value.as_mapping_mut() {
         for (key, value) in values.into_iter() {
-            *value = interpolate(value.to_owned())
-                .with_context(|| key.as_str().unwrap_or_default().to_owned())?;
+            *value =
+                interpolate(value.to_owned()).with_context(|| key.as_str().unwrap().to_owned())?;
         }
     }
 

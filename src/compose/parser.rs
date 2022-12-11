@@ -80,7 +80,7 @@ fn parameter_expanded(input: &str) -> IResult<&str, Token> {
                     "?" => Some(Var::Err(State::Set, tokens)),
                     ":+" => Some(Var::Replace(State::SetAndNonEmpty, tokens)),
                     "+" => Some(Var::Replace(State::Set, tokens)),
-                    _ => None,
+                    _ => unreachable!(),
                 },
             )
         },

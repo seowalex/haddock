@@ -288,6 +288,7 @@ dependencies = [
  "indexmap",
  "itertools",
  "nom",
+ "once_cell",
  "parse-hyperlinks",
  "serde",
  "serde_ignored",
