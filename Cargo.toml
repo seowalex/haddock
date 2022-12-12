@@ -3,6 +3,10 @@ name = "haddock"
 version = "0.1.0"
 edition = "2021"
 description = "Docker Compose for Podman"
+repository = "https://github.com/seowalex/haddock"
+license = "GPL-3.0-only"
+keywords = ["podman", "compose", "docker", "docker-compose"]
+categories = ["command-line-utilities"]
 
 [dependencies]
 anyhow = "1.0.66"

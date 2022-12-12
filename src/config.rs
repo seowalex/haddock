@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{anyhow, Context, Result};
 use clap::Args;
 use figment::{
     providers::{Env, Serialized},
@@ -23,7 +23,7 @@ static COMPOSE_FILE_NAMES: Lazy<Vec<String>> = Lazy::new(|| {
         .collect()
 });
 
-pub(crate) struct PathSeparator;
+struct PathSeparator;
 
 impl Separator for PathSeparator {
     fn separator() -> &'static str {
@@ -109,35 +109,22 @@ fn resolve(config: &Config) -> Result<Config> {
         .merge(Env::prefixed("COMPOSE_").ignore(&["env_file", "project_directory"]))
         .merge(Serialized::defaults(config))
         .extract::<Config>()?;
-    let file = find(env::current_dir()?.as_path(), &COMPOSE_FILE_NAMES)?;
-    println!("2");
 
-    for file in config.file.get_or_insert_with(|| {
+    if config.file.is_none() {
+        let file = find(
+            &config
+                .project_directory
+                .as_ref()
+                .map_or(env::current_dir()?, PathBuf::from),
+            &COMPOSE_FILE_NAMES,
+        )?;
+
         let override_file = file.with_extension(format!(
             "override.{}",
             file.extension().unwrap().to_string_lossy()
         ));
 
-        if override_file.is_file() {
-            vec![&file, &override_file]
-        } else {
-            vec![&file]
-        }
-        .into_iter()
-        .map(|file| file.to_string_lossy().to_string())
-        .collect()
-    }) {
-        *file = fs::canonicalize(&file)?.to_string_lossy().to_string();
-    }
-
-    if let Some(file) = config
-        .file
-        .get_or_insert_with(|| {
-            let override_file = file.with_extension(format!(
-                "override.{}",
-                file.extension().unwrap().to_string_lossy()
-            ));
-
+        config.file = Some(
             if override_file.is_file() {
                 vec![&file, &override_file]
             } else {
@@ -145,33 +132,43 @@ fn resolve(config: &Config) -> Result<Config> {
             }
             .into_iter()
             .map(|file| file.to_string_lossy().to_string())
-            .collect()
-        })
-        .first()
-    {
-        config.project_directory.get_or_insert_with(|| {
+            .collect(),
+        );
+    }
+
+    if let Some(files) = &mut config.file {
+        for file in files {
+            *file = fs::canonicalize(&file)
+                .with_context(|| anyhow!("{file} not found"))?
+                .to_string_lossy()
+                .to_string();
+        }
+    }
+
+    if let Some(file) = config.file.as_ref().and_then(|files| files.first()) {
+        let project_directory = config.project_directory.get_or_insert_with(|| {
             Path::new(file)
                 .parent()
                 .map(|parent| parent.to_string_lossy().to_string())
                 .unwrap_or_default()
         });
-    }
 
-    config.env_file.get_or_insert_with(|| {
-        config
-            .project_directory
-            .to_owned()
-            .map(PathBuf::from)
-            .unwrap_or_default()
-            .join(".env")
+        *project_directory = fs::canonicalize(&project_directory)
+            .with_context(|| anyhow!("{project_directory} not found"))?
             .to_string_lossy()
-            .to_string()
-    });
+            .to_string();
+    }
 
     Ok(config)
 }
 
-pub(crate) fn parse(config: &Config) -> Result<Config> {
-    dotenvy::from_filename(resolve(config)?.env_file.unwrap()).ok();
+pub(crate) fn load(config: &Config) -> Result<Config> {
+    let resolved_config = resolve(config)?;
+    let env_file = config.env_file.as_ref().map_or_else(
+        || PathBuf::from(resolved_config.project_directory.unwrap()).join(".env"),
+        PathBuf::from,
+    );
+
+    dotenvy::from_filename(env_file).ok();
     resolve(config)
 }
