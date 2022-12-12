@@ -4,7 +4,7 @@ mod version;
 use anyhow::Result;
 use clap::Subcommand;
 
-use crate::Config;
+use crate::config::Config;
 
 #[derive(Subcommand, Debug)]
 pub(crate) enum Command {

@@ -1,14 +1,37 @@
-#![warn(clippy::pedantic)]
-
 mod commands;
 mod compose;
 mod config;
 
 use anyhow::Result;
 use clap::Parser;
+use serde::{Deserialize, Serialize};
+use serde_with::{
+    formats::{CommaSeparator, Separator},
+    serde_as, skip_serializing_none, BoolFromInt, PickFirst, StringWithSeparator,
+};
+use std::env;
 
 use commands::Command;
-use config::Config;
+
+struct PathSeparator;
+
+impl Separator for PathSeparator {
+    fn separator() -> &'static str {
+        Box::leak(
+            env::var("COMPOSE_PATH_SEPARATOR")
+                .unwrap_or_else(|_| {
+                    String::from(if cfg!(unix) {
+                        ":"
+                    } else if cfg!(windows) {
+                        ";"
+                    } else {
+                        unreachable!()
+                    })
+                })
+                .into_boxed_str(),
+        )
+    }
+}
 
 #[derive(Parser, Debug)]
 #[command(version, about, next_display_order = None)]
@@ -17,12 +40,51 @@ struct Args {
     command: Command,
 
     #[command(flatten)]
-    config: Config,
+    flags: Flags,
+}
+
+#[skip_serializing_none]
+#[serde_as]
+#[derive(clap::Args, Serialize, Deserialize, Debug)]
+pub(crate) struct Flags {
+    /// Project name
+    #[arg(short, long)]
+    pub(crate) project_name: Option<String>,
+
+    /// Compose configuration files
+    #[arg(short, long)]
+    #[serde_as(as = "Option<PickFirst<(_, StringWithSeparator::<PathSeparator, String>)>>")]
+    pub(crate) file: Option<Vec<String>>,
+
+    /// Specify a profile to enable
+    #[arg(long)]
+    #[serde_as(as = "Option<PickFirst<(_, StringWithSeparator::<CommaSeparator, String>)>>")]
+    #[serde(rename = "profiles")]
+    pub(crate) profile: Option<Vec<String>>,
+
+    /// Specify an alternate environment file
+    #[arg(long)]
+    pub(crate) env_file: Option<String>,
+
+    /// Specify an alternate working directory
+    #[arg(long)]
+    pub(crate) project_directory: Option<String>,
+
+    #[arg(skip)]
+    #[serde_as(as = "Option<PickFirst<(_, BoolFromInt)>>")]
+    pub(crate) convert_windows_paths: Option<bool>,
+
+    #[arg(skip)]
+    pub(crate) path_separator: Option<String>,
+
+    #[arg(skip)]
+    #[serde_as(as = "Option<PickFirst<(_, BoolFromInt)>>")]
+    pub(crate) ignore_orphans: Option<bool>,
 }
 
 fn main() -> Result<()> {
     let args = Args::parse();
-    let config = config::load(&args.config)?;
+    let config = config::load(args.flags)?;
 
     commands::run(args.command, config)?;
 

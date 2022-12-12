@@ -7,7 +7,7 @@ use serde_with::{
     formats::SpaceSeparator, serde_as, serde_conv, skip_serializing_none, DisplayFromStr,
     DurationMicroSeconds, OneOrMany, PickFirst, StringWithSeparator,
 };
-use std::{convert::Infallible, time::Duration};
+use std::{borrow::ToOwned, convert::Infallible, time::Duration};
 use yansi::Paint;
 
 #[skip_serializing_none]
@@ -24,7 +24,7 @@ pub(crate) struct Compose {
 
 impl Compose {
     pub(crate) fn new() -> Self {
-        Default::default()
+        Self::default()
     }
 }
 
@@ -178,11 +178,11 @@ pub(crate) struct BuildConfig {
 serde_conv!(
     BuildConfigOrString,
     BuildConfig,
-    |build: &BuildConfig| { build.context.to_owned() },
+    |build: &BuildConfig| { build.context.clone() },
     |context| -> std::result::Result<_, Infallible> {
         Ok(BuildConfig {
             context,
-            ..Default::default()
+            ..BuildConfig::default()
         })
     }
 );
@@ -202,7 +202,7 @@ pub(crate) struct FileReference {
 serde_conv!(
     FileReferenceOrString,
     FileReference,
-    |file_reference: &FileReference| { file_reference.source.to_owned() },
+    |file_reference: &FileReference| { file_reference.source.clone() },
     |source| -> std::result::Result<_, Infallible> {
         Ok(FileReference {
             source,
@@ -238,7 +238,7 @@ serde_conv!(
     IndexMap<String, Dependency>,
     |dependencies: &IndexMap<String, Dependency>| dependencies.keys().cloned().collect::<Vec<_>>(),
     |dependencies: Vec<String>| -> std::result::Result<_, Infallible> {
-        Ok(IndexMap::from_iter(dependencies.into_iter().map(
+        Ok(dependencies.into_iter().map(
             |dependency| {
                 (
                     dependency,
@@ -247,7 +247,7 @@ serde_conv!(
                     },
                 )
             },
-        )))
+        ).collect::<IndexMap<_, _>>())
     }
 );
 
@@ -282,18 +282,18 @@ serde_conv!(
             .iter()
             .map(|(key, value)| match value {
                 Some(value) => format!("{key}={value}"),
-                None => key.to_owned(),
+                None => key.clone(),
             })
             .collect::<Vec<_>>()
     },
     |variables: Vec<String>| -> std::result::Result<_, Infallible> {
-        Ok(IndexMap::from_iter(variables.into_iter().map(|variable| {
+        Ok(variables.into_iter().map(|variable| {
             let mut parts = variable.split('=');
             (
                 parts.next().unwrap().to_owned(),
-                parts.next().map(|part| part.to_owned()),
+                parts.next().map(ToOwned::to_owned),
             )
-        })))
+        }).collect::<IndexMap<_, _>>())
     }
 );
 
@@ -328,7 +328,7 @@ serde_conv!(
             .iter()
             .map(|(key, value)| {
                 if value.is_empty() {
-                    key.to_owned()
+                    key.clone()
                 } else {
                     format!("{key}={value}")
                 }
@@ -336,13 +336,13 @@ serde_conv!(
             .collect::<Vec<_>>()
     },
     |variables: Vec<String>| -> std::result::Result<_, Infallible> {
-        Ok(IndexMap::from_iter(variables.into_iter().map(|variable| {
+        Ok(variables.into_iter().map(|variable| {
             let mut parts = variable.split('=');
             (
                 parts.next().unwrap().to_owned(),
-                parts.next().map(|part| part.to_owned()).unwrap_or_default(),
+                parts.next().map(ToOwned::to_owned).unwrap_or_default(),
             )
-        })))
+        }).collect::<IndexMap<_, _>>())
     }
 );
 
@@ -375,7 +375,7 @@ serde_conv!(
     IndexMap<String, Option<ServiceNetwork>>,
     |networks: &IndexMap<String, Option<ServiceNetwork>>| networks.keys().cloned().collect::<Vec<_>>(),
     |networks: Vec<String>| -> std::result::Result<_, Infallible> {
-        Ok(IndexMap::from_iter(networks.into_iter().map(|network| (network, None))))
+        Ok(networks.into_iter().map(|network| (network, None)).collect::<IndexMap<_, _>>())
     }
 );
 
@@ -395,12 +395,12 @@ serde_conv!(
     PortOrString,
     Port,
     |port: &Port| {
-        let mut string = port.target.to_owned();
+        let mut string = port.target.clone();
 
         match (&port.published, &port.host_ip) {
             (None, None) => {}
             (published, host_ip) => {
-                string = format!("{}:{string}", published.to_owned().unwrap_or_default());
+                string = format!("{}:{string}", published.clone().unwrap_or_default());
 
                 if let Some(host_ip) = host_ip {
                     string = format!("{host_ip}:{string}");
@@ -429,8 +429,8 @@ serde_conv!(
                     Some(part.to_owned())
                 }
             }),
-            host_ip: parts.next().map(|part| part.to_owned()),
-            protocol: container_parts.next().map(|part| part.to_owned()),
+            host_ip: parts.next().map(ToOwned::to_owned),
+            protocol: container_parts.next().map(ToOwned::to_owned),
         })
     }
 );
@@ -486,12 +486,12 @@ serde_conv!(
         let variables = variables.into_iter().map(|variable| -> Result<_> {
             let mut parts = variable.split('=');
             let key = parts.next().unwrap().to_owned();
-            let value = parts.next().map(|part| part.to_owned()).ok_or_else(|| anyhow!("{key}: value not defined"))?;
+            let value = parts.next().map(ToOwned::to_owned).ok_or_else(|| anyhow!("{key}: value not defined"))?;
 
             Ok((key, value))
         }).collect::<Result<Vec<_>, _>>()?;
 
-        Ok(IndexMap::from_iter(variables.into_iter()))
+        Ok(variables.into_iter().collect::<IndexMap<_, _>>())
     }
 );
 
@@ -532,7 +532,7 @@ pub(crate) struct ServiceVolumeBind {
 
 impl ServiceVolumeBind {
     pub(crate) fn new() -> Self {
-        Default::default()
+        Self::default()
     }
 }
 
@@ -614,7 +614,7 @@ serde_conv!(
                 "copy" | "nocopy" => {
                     volume = Some(ServiceVolumeVolume {
                         nocopy: Some(option == "nocopy"),
-                    })
+                    });
                 }
                 "" => {}
                 _ => {
@@ -707,7 +707,7 @@ mod tests {
     use std::fs;
     use test_generator::test_resources;
 
-    use super::Compose;
+    use super::*;
 
     #[test_resources("tests/fixtures/**/*.y*ml")]
     fn serde(resource: &str) {

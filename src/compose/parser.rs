@@ -136,7 +136,7 @@ pub(crate) fn parse(input: &str) -> Result<Vec<Token>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse, State, Token, Var};
+    use super::*;
 
     #[test]
     fn string() {

@@ -3,7 +3,7 @@ use clap::ValueEnum;
 use indexmap::IndexSet;
 use std::fs;
 
-use crate::{compose, Config};
+use crate::{compose, config::Config};
 
 /// Converts the compose file to platform's canonical format
 #[derive(clap::Args, Debug)]

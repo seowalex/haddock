@@ -9,9 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `-f, --file` flag.
-- `-h, --help` flag.
-- `-V, --version` flag.
+- `docker compose` flags.
 - `convert` command.
 - `help` command.
 - `version` command.
