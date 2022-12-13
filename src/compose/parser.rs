@@ -42,7 +42,7 @@ fn name(input: &str) -> IResult<&str, &str> {
 }
 
 fn variable(input: &str) -> IResult<&str, Token> {
-    map(name, |name| Token::Var(name.to_owned(), None))(input)
+    map(name, |name| Token::Var(name.to_string(), None))(input)
 }
 
 fn variable_expanded(input: &str) -> IResult<&str, Token> {
@@ -72,7 +72,7 @@ fn parameter_expanded(input: &str) -> IResult<&str, Token> {
         ))),
         |(name, separator, tokens)| {
             Token::Var(
-                name.to_owned(),
+                name.to_string(),
                 match separator {
                     ":-" => Some(Var::Default(State::SetAndNonEmpty, tokens)),
                     "-" => Some(Var::Default(State::Set, tokens)),

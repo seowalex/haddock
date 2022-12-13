@@ -8,7 +8,7 @@ use serde_yaml::Value;
 use std::{env, fs};
 use yansi::Paint;
 
-use crate::Config;
+use crate::config::Config;
 use parser::{State, Token, Var};
 use types::Compose;
 
@@ -43,9 +43,9 @@ fn evaluate(tokens: Vec<Token>) -> Result<String> {
                     evaluate(tokens).and_then(|err| {
                         if err.is_empty() {
                             bail!("Required variable \"{name}\" is missing a value")
-                        } else {
-                            bail!("Required variable \"{name}\" is missing a value: {err}")
                         }
+
+                        bail!("Required variable \"{name}\" is missing a value: {err}")
                     })
                 }),
                 Some(Var::Replace(state, tokens)) => {
@@ -80,59 +80,52 @@ fn evaluate(tokens: Vec<Token>) -> Result<String> {
         .map(|tokens| tokens.join(""))
 }
 
-fn interpolate(mut value: Value) -> Result<Value> {
+fn interpolate(value: &Value) -> Result<Value> {
     if let Some(value) = value.as_str() {
-        return parser::parse(value).and_then(evaluate).map(Value::String);
-    } else if let Some(values) = value.as_sequence_mut() {
-        for value in values {
-            *value = interpolate(value.to_owned())?;
-        }
-    } else if let Some(values) = value.as_mapping_mut() {
-        for (key, value) in values.into_iter() {
-            *value =
-                interpolate(value.to_owned()).with_context(|| key.as_str().unwrap().to_owned())?;
-        }
+        parser::parse(value).and_then(evaluate).map(Value::String)
+    } else if let Some(values) = value.as_sequence() {
+        values.iter().map(interpolate).collect::<Result<_>>()
+    } else if let Some(values) = value.as_mapping() {
+        values
+            .iter()
+            .map(|(key, value)| {
+                interpolate(value)
+                    .with_context(|| key.as_str().unwrap().to_string())
+                    .map(|value| (key.clone(), value))
+            })
+            .collect::<Result<_>>()
+            .map(Value::Mapping)
+    } else {
+        Ok(value.clone())
     }
-
-    Ok(value)
 }
 
 pub(crate) fn parse(config: Config) -> Result<Compose> {
-    let contents = match config.file {
-        Some(paths) => paths
-            .into_iter()
-            .map(|path| {
-                fs::read_to_string(&path)
-                    .with_context(|| format!("{path} not found"))
-                    .map(|content| (path, content))
-            })
-            .collect::<Result<Vec<_>, _>>()?,
-        None => vec![fs::read_to_string("compose.yaml")
-            .map(|content| (String::from("compose.yaml"), content))
-            .or_else(|_| {
-                fs::read_to_string("compose.yml")
-                    .map(|content| (String::from("compose.yml"), content))
-            })
-            .or_else(|_| {
-                fs::read_to_string("docker-compose.yaml")
-                    .map(|content| (String::from("docker-compose.yaml"), content))
-            })
-            .or_else(|_| {
-                fs::read_to_string("docker-compose.yml")
-                    .map(|content| (String::from("docker-compose.yml"), content))
-            })
-            .context("compose.yaml not found")?],
-    };
+    let contents = config
+        .files
+        .into_iter()
+        .map(|path| {
+            fs::read_to_string(&path)
+                .with_context(|| format!("{path} not found"))
+                .map(|content| (path, content))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
     let files = contents
         .into_iter()
         .map(|(path, content)| {
             serde_yaml::from_str(&content)
                 .map(|mut content: Value| {
                     if let Some(values) = content.as_mapping_mut() {
-                        if let Some((_, name)) = values.into_iter().find(|(key, _)| *key == "name")
+                        if let Some(name) = &config.project_name {
+                            values.insert(
+                                Value::String(String::from("name")),
+                                Value::String(name.to_string()),
+                            );
+                        } else if let Some((_, name)) =
+                            values.into_iter().find(|(key, _)| *key == "name")
                         {
                             if name.is_string() {
-                                if let Ok(interpolated_name) = interpolate(name.to_owned()) {
+                                if let Ok(interpolated_name) = interpolate(name) {
                                     *name = interpolated_name;
                                 }
 
@@ -158,6 +151,46 @@ pub(crate) fn parse(config: Config) -> Result<Compose> {
                                     name.as_f64().unwrap().to_string(),
                                 );
                             }
+                        } else if let Some((_, name)) =
+                            values.into_iter().find(|(key, _)| *key == "name")
+                        {
+                            if name.is_string() {
+                                if let Ok(interpolated_name) = interpolate(name) {
+                                    *name = interpolated_name;
+                                }
+
+                                env::set_var("COMPOSE_PROJECT_NAME", name.as_str().unwrap());
+                            } else if name.is_bool() {
+                                env::set_var(
+                                    "COMPOSE_PROJECT_NAME",
+                                    name.as_bool().unwrap().to_string(),
+                                );
+                            } else if name.is_u64() {
+                                env::set_var(
+                                    "COMPOSE_PROJECT_NAME",
+                                    name.as_u64().unwrap().to_string(),
+                                );
+                            } else if name.is_i64() {
+                                env::set_var(
+                                    "COMPOSE_PROJECT_NAME",
+                                    name.as_i64().unwrap().to_string(),
+                                );
+                            } else if name.is_f64() {
+                                env::set_var(
+                                    "COMPOSE_PROJECT_NAME",
+                                    name.as_f64().unwrap().to_string(),
+                                );
+                            }
+                        } else {
+                            let name = env::current_dir()
+                                .unwrap_or_default()
+                                .file_name()
+                                .unwrap_or_default()
+                                .to_string_lossy()
+                                .to_string();
+
+                            env::set_var("COMPOSE_PROJECT_NAME", &name);
+                            values.insert(Value::String(String::from("name")), Value::String(name));
                         }
                     }
 
@@ -167,7 +200,7 @@ pub(crate) fn parse(config: Config) -> Result<Compose> {
         })
         .map(|content| {
             content.and_then(|(path, content)| {
-                interpolate(content)
+                interpolate(&content)
                     .map(|content| (path, content))
                     .map_err(|err| match err.chain().collect::<Vec<_>>().split_last() {
                         Some((err, props)) => {
@@ -316,12 +349,12 @@ pub(crate) fn parse(config: Config) -> Result<Compose> {
 mod tests {
     use serde_yaml::Value;
 
-    use super::interpolate;
+    use super::*;
 
     #[test]
     fn simple_named() {
         let result = temp_env::with_var("VAR", Some("woop"), || {
-            interpolate(Value::String(String::from("$VAR")))
+            interpolate(&Value::String(String::from("$VAR")))
         });
 
         assert_eq!(result.ok(), Some(Value::String(String::from("woop"))));
@@ -330,7 +363,7 @@ mod tests {
     #[test]
     fn simple_named_missing() {
         let result = temp_env::with_var("VAR", None::<&str>, || {
-            interpolate(Value::String(String::from("pre $VAR post")))
+            interpolate(&Value::String(String::from("pre $VAR post")))
         });
 
         assert_eq!(result.ok(), Some(Value::String(String::from("pre  post"))));
@@ -339,7 +372,7 @@ mod tests {
     #[test]
     fn braced_named() {
         let result = temp_env::with_var("VAR", Some("woop"), || {
-            interpolate(Value::String(String::from("${VAR}")))
+            interpolate(&Value::String(String::from("${VAR}")))
         });
 
         assert_eq!(result.ok(), Some(Value::String(String::from("woop"))));
@@ -348,7 +381,7 @@ mod tests {
     #[test]
     fn braced_named_text() {
         let result = temp_env::with_var("VAR", Some("woop"), || {
-            interpolate(Value::String(String::from("pre ${VAR} post")))
+            interpolate(&Value::String(String::from("pre ${VAR} post")))
         });
 
         assert_eq!(
@@ -360,7 +393,7 @@ mod tests {
     #[test]
     fn default_named() {
         let result = temp_env::with_var("VAR", None::<&str>, || {
-            interpolate(Value::String(String::from("${VAR-default}")))
+            interpolate(&Value::String(String::from("${VAR-default}")))
         });
 
         assert_eq!(result.ok(), Some(Value::String(String::from("default"))));
@@ -369,7 +402,7 @@ mod tests {
     #[test]
     fn no_default_named() {
         let result = temp_env::with_var("VAR", Some("woop"), || {
-            interpolate(Value::String(String::from("${VAR-default}")))
+            interpolate(&Value::String(String::from("${VAR-default}")))
         });
 
         assert_eq!(result.ok(), Some(Value::String(String::from("woop"))));
@@ -378,7 +411,7 @@ mod tests {
     #[test]
     fn default_pattern() {
         let result = temp_env::with_var("DEF", Some("woop"), || {
-            interpolate(Value::String(String::from("${VAR-$DEF}")))
+            interpolate(&Value::String(String::from("${VAR-$DEF}")))
         });
 
         assert_eq!(result.ok(), Some(Value::String(String::from("woop"))));
@@ -387,7 +420,7 @@ mod tests {
     #[test]
     fn default_named_no_empty() {
         let result = temp_env::with_var("VAR", Some(""), || {
-            interpolate(Value::String(String::from("${VAR:-default}")))
+            interpolate(&Value::String(String::from("${VAR:-default}")))
         });
 
         assert_eq!(result.ok(), Some(Value::String(String::from("default"))));
@@ -396,7 +429,7 @@ mod tests {
     #[test]
     fn no_default_named_no_empty() {
         let result = temp_env::with_var("VAR", Some("woop"), || {
-            interpolate(Value::String(String::from("${VAR:-default}")))
+            interpolate(&Value::String(String::from("${VAR:-default}")))
         });
 
         assert_eq!(result.ok(), Some(Value::String(String::from("woop"))));
@@ -405,7 +438,7 @@ mod tests {
     #[test]
     fn default_pattern_no_empty() {
         let result = temp_env::with_vars(vec![("VAR", Some("")), ("DEF", Some("woop"))], || {
-            interpolate(Value::String(String::from("${VAR:-$DEF}")))
+            interpolate(&Value::String(String::from("${VAR:-$DEF}")))
         });
 
         assert_eq!(result.ok(), Some(Value::String(String::from("woop"))));
@@ -414,7 +447,7 @@ mod tests {
     #[test]
     fn error_named() {
         let result = temp_env::with_var("VAR", None::<&str>, || {
-            interpolate(Value::String(String::from("${VAR?msg}")))
+            interpolate(&Value::String(String::from("${VAR?msg}")))
         });
 
         assert_eq!(
@@ -428,7 +461,7 @@ mod tests {
     #[test]
     fn error_named_no_empty() {
         let result = temp_env::with_var("VAR", Some(""), || {
-            interpolate(Value::String(String::from("${VAR:?msg}")))
+            interpolate(&Value::String(String::from("${VAR:?msg}")))
         });
 
         assert_eq!(
@@ -442,7 +475,7 @@ mod tests {
     #[test]
     fn error_no_message() {
         let result = temp_env::with_var("VAR", None::<&str>, || {
-            interpolate(Value::String(String::from("${VAR?}")))
+            interpolate(&Value::String(String::from("${VAR?}")))
         });
 
         assert_eq!(
@@ -454,7 +487,7 @@ mod tests {
     #[test]
     fn error_no_message_no_empty() {
         let result = temp_env::with_var("VAR", Some(""), || {
-            interpolate(Value::String(String::from("${VAR:?}")))
+            interpolate(&Value::String(String::from("${VAR:?}")))
         });
 
         assert_eq!(
@@ -466,7 +499,7 @@ mod tests {
     #[test]
     fn replacement_named() {
         let result = temp_env::with_var("VAR", Some(""), || {
-            interpolate(Value::String(String::from("${VAR+replacement}")))
+            interpolate(&Value::String(String::from("${VAR+replacement}")))
         });
 
         assert_eq!(
@@ -478,7 +511,7 @@ mod tests {
     #[test]
     fn no_replacement_named() {
         let result = temp_env::with_var("VAR", None::<&str>, || {
-            interpolate(Value::String(String::from("${VAR+replacement}")))
+            interpolate(&Value::String(String::from("${VAR+replacement}")))
         });
 
         assert_eq!(result.ok(), Some(Value::String(String::new())));
@@ -487,7 +520,7 @@ mod tests {
     #[test]
     fn replacement_named_no_empty() {
         let result = temp_env::with_var("VAR", Some("woop"), || {
-            interpolate(Value::String(String::from("${VAR:+replacement}")))
+            interpolate(&Value::String(String::from("${VAR:+replacement}")))
         });
 
         assert_eq!(
@@ -499,7 +532,7 @@ mod tests {
     #[test]
     fn no_replacement_named_no_empty() {
         let result = temp_env::with_var("VAR", Some(""), || {
-            interpolate(Value::String(String::from("${VAR:+replacement}")))
+            interpolate(&Value::String(String::from("${VAR:+replacement}")))
         });
 
         assert_eq!(result.ok(), Some(Value::String(String::new())));

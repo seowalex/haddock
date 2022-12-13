@@ -7,7 +7,7 @@ use serde_with::{
     formats::SpaceSeparator, serde_as, serde_conv, skip_serializing_none, DisplayFromStr,
     DurationMicroSeconds, OneOrMany, PickFirst, StringWithSeparator,
 };
-use std::{borrow::ToOwned, convert::Infallible, time::Duration};
+use std::{convert::Infallible, time::Duration};
 use yansi::Paint;
 
 #[skip_serializing_none]
@@ -290,8 +290,8 @@ serde_conv!(
         Ok(variables.into_iter().map(|variable| {
             let mut parts = variable.split('=');
             (
-                parts.next().unwrap().to_owned(),
-                parts.next().map(ToOwned::to_owned),
+                parts.next().unwrap().to_string(),
+                parts.next().map(ToString::to_string),
             )
         }).collect::<IndexMap<_, _>>())
     }
@@ -339,8 +339,8 @@ serde_conv!(
         Ok(variables.into_iter().map(|variable| {
             let mut parts = variable.split('=');
             (
-                parts.next().unwrap().to_owned(),
-                parts.next().map(ToOwned::to_owned).unwrap_or_default(),
+                parts.next().unwrap().to_string(),
+                parts.next().map(ToString::to_string).unwrap_or_default(),
             )
         }).collect::<IndexMap<_, _>>())
     }
@@ -418,7 +418,7 @@ serde_conv!(
         let mut parts = port.split(':').rev();
         let container_port = parts.next().unwrap();
         let mut container_parts = container_port.split('/');
-        let target = container_parts.next().unwrap().to_owned();
+        let target = container_parts.next().unwrap().to_string();
 
         Ok(Port {
             target,
@@ -426,11 +426,11 @@ serde_conv!(
                 if part.is_empty() {
                     None
                 } else {
-                    Some(part.to_owned())
+                    Some(part.to_string())
                 }
             }),
-            host_ip: parts.next().map(ToOwned::to_owned),
-            protocol: container_parts.next().map(ToOwned::to_owned),
+            host_ip: parts.next().map(ToString::to_string),
+            protocol: container_parts.next().map(ToString::to_string),
         })
     }
 );
@@ -485,8 +485,8 @@ serde_conv!(
     |variables: Vec<String>| -> Result<_> {
         let variables = variables.into_iter().map(|variable| -> Result<_> {
             let mut parts = variable.split('=');
-            let key = parts.next().unwrap().to_owned();
-            let value = parts.next().map(ToOwned::to_owned).ok_or_else(|| anyhow!("{key}: value not defined"))?;
+            let key = parts.next().unwrap().to_string();
+            let value = parts.next().map(ToString::to_string).ok_or_else(|| anyhow!("{key}: value not defined"))?;
 
             Ok((key, value))
         }).collect::<Result<Vec<_>, _>>()?;
@@ -567,18 +567,18 @@ serde_conv!(
 
         match parts[..] {
             [dst] => {
-                target = dst.to_owned();
+                target = dst.to_string();
             }
             [src, dst] if dst.starts_with('/') => {
                 if src.starts_with('/') || src.starts_with('.') {
                     r#type = ServiceVolumeType::Bind;
                 }
 
-                source = Some(src.to_owned());
-                target = dst.to_owned();
+                source = Some(src.to_string());
+                target = dst.to_string();
             }
             [dst, opts] => {
-                target = dst.to_owned();
+                target = dst.to_string();
                 options = opts;
             }
             [src, dst, opts] => {
@@ -586,8 +586,8 @@ serde_conv!(
                     r#type = ServiceVolumeType::Bind;
                 }
 
-                source = Some(src.to_owned());
-                target = dst.to_owned();
+                source = Some(src.to_string());
+                target = dst.to_string();
                 options = opts;
             }
             _ => {
@@ -606,10 +606,10 @@ serde_conv!(
                 "shared" | "rshared" | "slave" | "rslave" | "private" | "rprivate"
                 | "unbindable" | "runbindable" => {
                     bind.get_or_insert(ServiceVolumeBind::new()).propagation =
-                        Some(option.to_owned());
+                        Some(option.to_string());
                 }
                 "z" | "Z" => {
-                    bind.get_or_insert(ServiceVolumeBind::new()).selinux = Some(option.to_owned());
+                    bind.get_or_insert(ServiceVolumeBind::new()).selinux = Some(option.to_string());
                 }
                 "copy" | "nocopy" => {
                     volume = Some(ServiceVolumeVolume {
