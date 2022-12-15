@@ -1,16 +1,21 @@
 use anyhow::{anyhow, bail, Result};
 use byte_unit::Byte;
 use humantime::{format_duration, parse_duration};
-use indexmap::IndexMap;
+use indexmap::{IndexMap, IndexSet};
 use serde::{Deserialize, Serialize};
 use serde_with::{
     formats::SpaceSeparator, serde_as, serde_conv, skip_serializing_none, DisplayFromStr,
     DurationMicroSeconds, OneOrMany, PickFirst, StringWithSeparator,
 };
-use std::{convert::Infallible, time::Duration};
+use serde_yaml::Value;
+use std::{
+    convert::Infallible,
+    hash::{Hash, Hasher},
+    time::Duration,
+};
 use yansi::Paint;
 
-use crate::utils::{MergeOption, MergeValue};
+use crate::utils::Merge;
 
 #[skip_serializing_none]
 #[derive(Serialize, Deserialize, Default, Debug)]
@@ -36,20 +41,20 @@ impl Compose {
         for (name, service) in other.services {
             self.services
                 .entry(name)
-                .and_modify(|combined_service| combined_service.merge(service.clone()))
+                .and_modify(|combined_service| combined_service.merge(&service))
                 .or_insert(service);
         }
 
-        self.networks.merge_many(other.networks);
-        self.volumes.merge_many(other.volumes);
-        self.configs.merge_many(other.configs);
-        self.secrets.merge_many(other.secrets);
+        self.networks.merge(other.networks);
+        self.volumes.merge(other.volumes);
+        self.configs.merge(other.configs);
+        self.secrets.merge(other.secrets);
     }
 }
 
 #[skip_serializing_none]
 #[serde_as]
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct Service {
     pub(crate) blkio_config: Option<BlkioConfig>,
     #[serde_as(as = "Option<PickFirst<(_, BuildConfigOrString)>>")]
@@ -59,8 +64,8 @@ pub(crate) struct Service {
     pub(crate) cgroup_parent: Option<String>,
     #[serde_as(as = "Option<PickFirst<(_, StringWithSeparator::<SpaceSeparator, String>)>>")]
     pub(crate) command: Option<Vec<String>>,
-    #[serde_as(as = "Option<Vec<PickFirst<(_, FileReferenceOrString)>>>")]
-    pub(crate) configs: Option<Vec<FileReference>>,
+    #[serde_as(as = "Option<IndexSet<PickFirst<(_, FileReferenceOrString)>>>")]
+    pub(crate) configs: Option<IndexSet<FileReference>>,
     pub(crate) container_name: Option<String>,
     #[serde_as(as = "Option<PickFirst<(DurationMicroSeconds, DurationWithSuffix)>>")]
     pub(crate) cpu_period: Option<Duration>,
@@ -77,7 +82,8 @@ pub(crate) struct Service {
     pub(crate) depends_on: Option<IndexMap<String, Dependency>>,
     pub(crate) deploy: Option<DeployConfig>,
     pub(crate) device_cgroup_rules: Option<Vec<String>>,
-    pub(crate) devices: Option<Vec<String>>,
+    #[serde_as(as = "Option<IndexSet<DeviceOrString>>")]
+    pub(crate) devices: Option<IndexSet<Device>>,
     #[serde_as(as = "Option<OneOrMany<_>>")]
     pub(crate) dns: Option<Vec<String>>,
     pub(crate) dns_opt: Option<Vec<String>>,
@@ -124,8 +130,8 @@ pub(crate) struct Service {
     pub(crate) read_only: Option<bool>,
     pub(crate) restart: Option<RestartPolicy>,
     pub(crate) runtime: Option<String>,
-    #[serde_as(as = "Option<Vec<PickFirst<(_, FileReferenceOrString)>>>")]
-    pub(crate) secrets: Option<Vec<FileReference>>,
+    #[serde_as(as = "Option<IndexSet<PickFirst<(_, FileReferenceOrString)>>>")]
+    pub(crate) secrets: Option<IndexSet<FileReference>>,
     pub(crate) security_opt: Option<Vec<String>>,
     pub(crate) shm_size: Option<Byte>,
     #[serde_as(as = "Option<DurationWithSuffix>")]
@@ -140,23 +146,44 @@ pub(crate) struct Service {
     pub(crate) ulimits: Option<IndexMap<String, ResourceLimit>>,
     pub(crate) user: Option<String>,
     pub(crate) userns_mode: Option<String>,
-    #[serde_as(as = "Option<Vec<PickFirst<(_, ServiceVolumeOrString)>>>")]
-    pub(crate) volumes: Option<Vec<ServiceVolume>>,
+    #[serde_as(as = "Option<IndexSet<PickFirst<(_, ServiceVolumeOrString)>>>")]
+    pub(crate) volumes: Option<IndexSet<ServiceVolume>>,
     pub(crate) volumes_from: Option<Vec<String>>,
     pub(crate) working_dir: Option<String>,
 }
 
+fn merge(base: &mut Value, other: Value) {
+    match (base, other) {
+        (base @ Value::Mapping(_), Value::Mapping(other)) => {
+            let a = base.as_mapping_mut().unwrap();
+
+            for (key, other_value) in other {
+                a.entry(key.clone())
+                    .and_modify(|value| match key.as_str().unwrap() {
+                        "command" | "entrypoint" => *value = other_value.clone(),
+                        _ => merge(value, other_value.clone()),
+                    })
+                    .or_insert(other_value);
+            }
+        }
+        (Value::Sequence(base), Value::Sequence(other)) => {
+            base.extend(other);
+        }
+        (base, other) => *base = other,
+    }
+}
+
 impl Service {
-    pub(crate) fn merge(&mut self, other: Self) {
+    pub(crate) fn merge(&mut self, other: &Self) {
         let mut value = serde_yaml::to_value(&self).unwrap();
-        value.merge(serde_yaml::to_value(&other).unwrap());
+        merge(&mut value, serde_yaml::to_value(other).unwrap());
 
         *self = serde_yaml::from_value(value).unwrap();
     }
 }
 
 #[skip_serializing_none]
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct BlkioConfig {
     pub(crate) weight: Option<u16>,
     pub(crate) weight_device: Option<Vec<WeightDevice>>,
@@ -166,13 +193,13 @@ pub(crate) struct BlkioConfig {
     pub(crate) device_write_iops: Option<Vec<ThrottleDevice>>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct WeightDevice {
     pub(crate) path: String,
     pub(crate) weight: u16,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct ThrottleDevice {
     pub(crate) path: String,
     pub(crate) rate: Byte,
@@ -180,7 +207,7 @@ pub(crate) struct ThrottleDevice {
 
 #[skip_serializing_none]
 #[serde_as]
-#[derive(Serialize, Deserialize, Clone, Default, Debug)]
+#[derive(Serialize, Deserialize, Default, Debug)]
 pub(crate) struct BuildConfig {
     pub(crate) context: String,
     pub(crate) dockerfile: Option<String>,
@@ -197,8 +224,8 @@ pub(crate) struct BuildConfig {
     pub(crate) pull: Option<bool>,
     pub(crate) shm_size: Option<Byte>,
     pub(crate) target: Option<String>,
-    #[serde_as(as = "Option<Vec<PickFirst<(_, FileReferenceOrString)>>>")]
-    pub(crate) secrets: Option<Vec<FileReference>>,
+    #[serde_as(as = "Option<IndexSet<PickFirst<(_, FileReferenceOrString)>>>")]
+    pub(crate) secrets: Option<IndexSet<FileReference>>,
     pub(crate) tags: Option<Vec<String>>,
     pub(crate) platforms: Option<Vec<String>>,
 }
@@ -217,7 +244,7 @@ serde_conv!(
 
 #[skip_serializing_none]
 #[serde_as]
-#[derive(Serialize, Deserialize, Clone, Default, Debug)]
+#[derive(Serialize, Deserialize, Default, Debug)]
 pub(crate) struct FileReference {
     pub(crate) source: String,
     pub(crate) target: Option<String>,
@@ -225,6 +252,20 @@ pub(crate) struct FileReference {
     pub(crate) gid: Option<String>,
     #[serde_as(as = "Option<PickFirst<(_, DisplayFromStr)>>")]
     pub(crate) mode: Option<u32>,
+}
+
+impl PartialEq for FileReference {
+    fn eq(&self, other: &Self) -> bool {
+        self.source == other.source
+    }
+}
+
+impl Eq for FileReference {}
+
+impl Hash for FileReference {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.source.hash(state);
+    }
 }
 
 serde_conv!(
@@ -246,12 +287,12 @@ serde_conv!(
     |duration: String| parse_duration(&duration)
 );
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct Dependency {
     pub(crate) condition: Condition,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub(crate) enum Condition {
     #[serde(rename = "service_started")]
     Started,
@@ -280,13 +321,13 @@ serde_conv!(
 );
 
 #[skip_serializing_none]
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct DeployConfig {
     pub(crate) resources: Option<Resources>,
 }
 
 #[skip_serializing_none]
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct Resources {
     pub(crate) limits: Option<Resource>,
     pub(crate) reservations: Option<Resource>,
@@ -294,13 +335,56 @@ pub(crate) struct Resources {
 
 #[skip_serializing_none]
 #[serde_as]
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct Resource {
     #[serde_as(as = "Option<PickFirst<(_, DisplayFromStr)>>")]
     pub(crate) cpus: Option<f32>,
     pub(crate) memory: Option<Byte>,
     pub(crate) pids: Option<i64>,
 }
+
+#[skip_serializing_none]
+#[derive(Serialize, Deserialize, Debug)]
+pub(crate) struct Device {
+    pub(crate) source: String,
+    pub(crate) target: String,
+    pub(crate) permissions: Option<String>,
+}
+
+impl PartialEq for Device {
+    fn eq(&self, other: &Self) -> bool {
+        self.target == other.target
+    }
+}
+
+impl Eq for Device {}
+
+impl Hash for Device {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.target.hash(state);
+    }
+}
+
+serde_conv!(
+    DeviceOrString,
+    Device,
+    |device: &Device| {
+        if let Some(permissions) = &device.permissions {
+            format!("{}:{}:{permissions}", device.source, device.target)
+        } else {
+            format!("{}:{}", device.source, device.target)
+        }
+    },
+    |device: String| -> std::result::Result<_, Infallible> {
+        let mut parts = device.split(':');
+
+        Ok(Device {
+            source: parts.next().unwrap().to_string(),
+            target: parts.next().unwrap().to_string(),
+            permissions: parts.next().map(ToString::to_string),
+        })
+    }
+);
 
 serde_conv!(
     MappingWithEqualsNull,
@@ -326,7 +410,7 @@ serde_conv!(
 );
 
 #[skip_serializing_none]
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct Extends {
     pub(crate) service: String,
     pub(crate) file: Option<String>,
@@ -334,7 +418,7 @@ pub(crate) struct Extends {
 
 #[skip_serializing_none]
 #[serde_as]
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct Healthcheck {
     #[serde_as(as = "Option<PickFirst<(_, StringWithSeparator::<SpaceSeparator, String>)>>")]
     pub(crate) test: Option<Vec<String>>,
@@ -375,13 +459,13 @@ serde_conv!(
 );
 
 #[skip_serializing_none]
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct Logging {
     pub(crate) driver: Option<String>,
     pub(crate) options: Option<IndexMap<String, String>>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(untagged)]
 pub(crate) enum SwapLimit {
     Limited(Byte),
@@ -389,7 +473,7 @@ pub(crate) enum SwapLimit {
 }
 
 #[skip_serializing_none]
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct ServiceNetwork {
     pub(crate) aliases: Option<Vec<String>>,
     pub(crate) ipv4_address: Option<String>,
@@ -409,7 +493,7 @@ serde_conv!(
 
 #[skip_serializing_none]
 #[serde_as]
-#[derive(Serialize, Deserialize, Clone, Default, Debug)]
+#[derive(Serialize, Deserialize, Default, Debug)]
 pub(crate) struct Port {
     #[serde_as(as = "PickFirst<(_, StringOrU16)>")]
     pub(crate) target: String,
@@ -482,7 +566,7 @@ serde_conv!(
     |port: u16| -> std::result::Result<_, Infallible> { Ok(port.to_string()) }
 );
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum PullPolicy {
     Always,
@@ -492,7 +576,7 @@ pub(crate) enum PullPolicy {
     Newer,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "kebab-case")]
 pub(crate) enum RestartPolicy {
     No,
@@ -523,7 +607,7 @@ serde_conv!(
     }
 );
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(untagged)]
 pub(crate) enum ResourceLimit {
     Single(i32),
@@ -531,7 +615,7 @@ pub(crate) enum ResourceLimit {
 }
 
 #[skip_serializing_none]
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct ServiceVolume {
     pub(crate) r#type: ServiceVolumeType,
     pub(crate) source: Option<String>,
@@ -542,7 +626,21 @@ pub(crate) struct ServiceVolume {
     pub(crate) tmpfs: Option<ServiceVolumeTmpfs>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+impl PartialEq for ServiceVolume {
+    fn eq(&self, other: &Self) -> bool {
+        self.target == other.target
+    }
+}
+
+impl Eq for ServiceVolume {}
+
+impl Hash for ServiceVolume {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.target.hash(state);
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum ServiceVolumeType {
     Volume,
@@ -551,7 +649,7 @@ pub(crate) enum ServiceVolumeType {
 }
 
 #[skip_serializing_none]
-#[derive(Serialize, Deserialize, Clone, Default, Debug)]
+#[derive(Serialize, Deserialize, Default, Debug)]
 pub(crate) struct ServiceVolumeBind {
     pub(crate) propagation: Option<String>,
     pub(crate) create_host_path: Option<bool>,
@@ -565,14 +663,14 @@ impl ServiceVolumeBind {
 }
 
 #[skip_serializing_none]
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct ServiceVolumeVolume {
     pub(crate) nocopy: Option<bool>,
 }
 
 #[skip_serializing_none]
 #[serde_as]
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct ServiceVolumeTmpfs {
     pub(crate) size: Option<Byte>,
     #[serde_as(as = "Option<PickFirst<(_, DisplayFromStr)>>")]
