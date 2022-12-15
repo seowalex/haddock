@@ -105,7 +105,8 @@ pub(crate) fn parse(config: Config) -> Result<Compose> {
         .collect::<Result<Vec<_>, _>>()?;
     let files = contents
         .into_iter()
-        .map(|(path, content)| {
+        .enumerate()
+        .map(|(i, (path, content))| {
             serde_yaml::from_str(&content)
                 .map_err(Error::from)
                 .and_then(|mut content: Value| {
@@ -142,7 +143,7 @@ pub(crate) fn parse(config: Config) -> Result<Compose> {
                                     name.as_f64().unwrap().to_string(),
                                 );
                             }
-                        } else {
+                        } else if i == 0 {
                             let name = env::current_dir()?
                                 .file_name()
                                 .unwrap_or_default()
@@ -191,71 +192,6 @@ pub(crate) fn parse(config: Config) -> Result<Compose> {
     let mut combined_file = Compose::new();
 
     for (path, file, unused) in files {
-        for (name, service) in &file.services {
-            if service.build.is_none() && service.image.is_none() {
-                bail!(
-                    "{path}: service \"{name}\" has neither an image nor a build context specified"
-                );
-            }
-
-            if service.network_mode.as_deref().unwrap_or_default() == "host"
-                && service.ports.is_some()
-            {
-                bail!(
-                    "{path}: service \"{name}\" cannot have port mappings due to host network mode"
-                );
-            }
-        }
-
-        if let Some(networks) = &file.networks {
-            for (name, network) in networks {
-                if let Some(network) = network {
-                    if network.external.unwrap_or_default()
-                        && (network.driver.is_some()
-                            || network.driver_opts.is_some()
-                            || network.enable_ipv6.is_some()
-                            || network.ipam.is_some()
-                            || network.internal.is_some()
-                            || network.labels.is_some())
-                    {
-                        bail!("{path}: conflicting parameters for network \"{name}\"");
-                    }
-                }
-            }
-        }
-
-        if let Some(volumes) = &file.volumes {
-            for (name, volume) in volumes {
-                if let Some(volume) = volume {
-                    if volume.external.unwrap_or_default()
-                        && (volume.driver.is_some()
-                            || volume.driver_opts.is_some()
-                            || volume.labels.is_some())
-                    {
-                        bail!("{path}: conflicting parameters for volume \"{name}\"");
-                    }
-                }
-            }
-        }
-
-        if let Some(configs) = &file.configs {
-            for (name, config) in configs {
-                if config.external.unwrap_or_default() && config.file.is_some() {
-                    bail!("{path}: conflicting parameters for config \"{name}\"");
-                }
-            }
-        }
-
-        if let Some(secrets) = &file.secrets {
-            for (name, secret) in secrets {
-                if secret.external.unwrap_or_default()
-                    && (secret.file.is_some() || secret.environment.is_some())
-                {
-                    bail!("{path}: conflicting parameters for secret \"{name}\"");
-                }
-            }
-        }
-
         if !unused.is_empty() {
             eprintln!(
                 "{} Unsupported/unknown properties in {path}: {}",
@@ -264,40 +200,66 @@ pub(crate) fn parse(config: Config) -> Result<Compose> {
             );
         }
 
-        combined_file.version = file.version;
-        combined_file.name = file.name;
-        combined_file.services.extend(file.services);
+        combined_file.merge(file);
+    }
 
-        match (&mut combined_file.networks, file.networks) {
-            (Some(combined_networks), Some(networks)) => combined_networks.extend(networks),
-            (combined_networks, networks) if combined_networks.is_none() && networks.is_some() => {
-                *combined_networks = networks;
-            }
-            _ => {}
+    for (name, service) in &combined_file.services {
+        if service.build.is_none() && service.image.is_none() {
+            bail!("Service \"{name}\" has neither an image nor a build context specified");
         }
 
-        match (&mut combined_file.volumes, file.volumes) {
-            (Some(combined_volumes), Some(volumes)) => combined_volumes.extend(volumes),
-            (combined_volumes, volumes) if combined_volumes.is_none() && volumes.is_some() => {
-                *combined_volumes = volumes;
-            }
-            _ => {}
+        if service.network_mode.as_deref().unwrap_or_default() == "host" && service.ports.is_some()
+        {
+            bail!("Service \"{name}\" cannot have port mappings due to host network mode");
         }
+    }
 
-        match (&mut combined_file.configs, file.configs) {
-            (Some(combined_configs), Some(configs)) => combined_configs.extend(configs),
-            (combined_configs, configs) if combined_configs.is_none() && configs.is_some() => {
-                *combined_configs = configs;
+    if let Some(networks) = &combined_file.networks {
+        for (name, network) in networks {
+            if let Some(network) = network {
+                if network.external.unwrap_or_default()
+                    && (network.driver.is_some()
+                        || network.driver_opts.is_some()
+                        || network.enable_ipv6.is_some()
+                        || network.ipam.is_some()
+                        || network.internal.is_some()
+                        || network.labels.is_some())
+                {
+                    bail!("Conflicting parameters for network \"{name}\"");
+                }
             }
-            _ => {}
         }
+    }
 
-        match (&mut combined_file.secrets, file.secrets) {
-            (Some(combined_secrets), Some(secrets)) => combined_secrets.extend(secrets),
-            (combined_secrets, secrets) if combined_secrets.is_none() && secrets.is_some() => {
-                *combined_secrets = secrets;
+    if let Some(volumes) = &combined_file.volumes {
+        for (name, volume) in volumes {
+            if let Some(volume) = volume {
+                if volume.external.unwrap_or_default()
+                    && (volume.driver.is_some()
+                        || volume.driver_opts.is_some()
+                        || volume.labels.is_some())
+                {
+                    bail!("Conflicting parameters for volume \"{name}\"");
+                }
             }
-            _ => {}
+        }
+    }
+
+    if let Some(configs) = &combined_file.configs {
+        for (name, config) in configs {
+            if config.external.unwrap_or_default() && config.file.is_some() {
+                bail!("Conflicting parameters for config \"{name}\"");
+            }
+        }
+    }
+
+    if let Some(secrets) = &combined_file.secrets {
+        for (name, secret) in secrets {
+            if secret.external.unwrap_or_default()
+                && (secret.file.is_some() || secret.environment.is_some())
+            {
+                bail!("Conflicting parameters for secret \"{name}\"");
+            }
         }
     }
 

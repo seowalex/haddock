@@ -10,6 +10,8 @@ use serde_with::{
 use std::{convert::Infallible, time::Duration};
 use yansi::Paint;
 
+use crate::utils::{MergeOption, MergeValue};
+
 #[skip_serializing_none]
 #[derive(Serialize, Deserialize, Default, Debug)]
 pub(crate) struct Compose {
@@ -26,11 +28,28 @@ impl Compose {
     pub(crate) fn new() -> Self {
         Self::default()
     }
+
+    pub(crate) fn merge(&mut self, other: Self) {
+        self.version.merge_one(other.version);
+        self.name.merge_one(other.name);
+
+        for (name, service) in other.services {
+            self.services
+                .entry(name)
+                .and_modify(|combined_service| combined_service.merge(service.clone()))
+                .or_insert(service);
+        }
+
+        self.networks.merge_many(other.networks);
+        self.volumes.merge_many(other.volumes);
+        self.configs.merge_many(other.configs);
+        self.secrets.merge_many(other.secrets);
+    }
 }
 
 #[skip_serializing_none]
 #[serde_as]
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub(crate) struct Service {
     pub(crate) blkio_config: Option<BlkioConfig>,
     #[serde_as(as = "Option<PickFirst<(_, BuildConfigOrString)>>")]
@@ -127,8 +146,17 @@ pub(crate) struct Service {
     pub(crate) working_dir: Option<String>,
 }
 
+impl Service {
+    pub(crate) fn merge(&mut self, other: Self) {
+        let mut value = serde_yaml::to_value(&self).unwrap();
+        value.merge(serde_yaml::to_value(&other).unwrap());
+
+        *self = serde_yaml::from_value(value).unwrap();
+    }
+}
+
 #[skip_serializing_none]
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub(crate) struct BlkioConfig {
     pub(crate) weight: Option<u16>,
     pub(crate) weight_device: Option<Vec<WeightDevice>>,
@@ -138,13 +166,13 @@ pub(crate) struct BlkioConfig {
     pub(crate) device_write_iops: Option<Vec<ThrottleDevice>>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub(crate) struct WeightDevice {
     pub(crate) path: String,
     pub(crate) weight: u16,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub(crate) struct ThrottleDevice {
     pub(crate) path: String,
     pub(crate) rate: Byte,
@@ -152,7 +180,7 @@ pub(crate) struct ThrottleDevice {
 
 #[skip_serializing_none]
 #[serde_as]
-#[derive(Serialize, Deserialize, Default, Debug)]
+#[derive(Serialize, Deserialize, Clone, Default, Debug)]
 pub(crate) struct BuildConfig {
     pub(crate) context: String,
     pub(crate) dockerfile: Option<String>,
@@ -189,7 +217,7 @@ serde_conv!(
 
 #[skip_serializing_none]
 #[serde_as]
-#[derive(Serialize, Deserialize, Default, Debug)]
+#[derive(Serialize, Deserialize, Clone, Default, Debug)]
 pub(crate) struct FileReference {
     pub(crate) source: String,
     pub(crate) target: Option<String>,
@@ -218,12 +246,12 @@ serde_conv!(
     |duration: String| parse_duration(&duration)
 );
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub(crate) struct Dependency {
     pub(crate) condition: Condition,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub(crate) enum Condition {
     #[serde(rename = "service_started")]
     Started,
@@ -252,13 +280,13 @@ serde_conv!(
 );
 
 #[skip_serializing_none]
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub(crate) struct DeployConfig {
     pub(crate) resources: Option<Resources>,
 }
 
 #[skip_serializing_none]
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub(crate) struct Resources {
     pub(crate) limits: Option<Resource>,
     pub(crate) reservations: Option<Resource>,
@@ -266,7 +294,7 @@ pub(crate) struct Resources {
 
 #[skip_serializing_none]
 #[serde_as]
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub(crate) struct Resource {
     #[serde_as(as = "Option<PickFirst<(_, DisplayFromStr)>>")]
     pub(crate) cpus: Option<f32>,
@@ -298,7 +326,7 @@ serde_conv!(
 );
 
 #[skip_serializing_none]
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub(crate) struct Extends {
     pub(crate) service: String,
     pub(crate) file: Option<String>,
@@ -306,7 +334,7 @@ pub(crate) struct Extends {
 
 #[skip_serializing_none]
 #[serde_as]
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub(crate) struct Healthcheck {
     #[serde_as(as = "Option<PickFirst<(_, StringWithSeparator::<SpaceSeparator, String>)>>")]
     pub(crate) test: Option<Vec<String>>,
@@ -347,13 +375,13 @@ serde_conv!(
 );
 
 #[skip_serializing_none]
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub(crate) struct Logging {
     pub(crate) driver: Option<String>,
     pub(crate) options: Option<IndexMap<String, String>>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(untagged)]
 pub(crate) enum SwapLimit {
     Limited(Byte),
@@ -361,7 +389,7 @@ pub(crate) enum SwapLimit {
 }
 
 #[skip_serializing_none]
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub(crate) struct ServiceNetwork {
     pub(crate) aliases: Option<Vec<String>>,
     pub(crate) ipv4_address: Option<String>,
@@ -381,7 +409,7 @@ serde_conv!(
 
 #[skip_serializing_none]
 #[serde_as]
-#[derive(Serialize, Deserialize, Default, Debug)]
+#[derive(Serialize, Deserialize, Clone, Default, Debug)]
 pub(crate) struct Port {
     #[serde_as(as = "PickFirst<(_, StringOrU16)>")]
     pub(crate) target: String,
@@ -454,7 +482,7 @@ serde_conv!(
     |port: u16| -> std::result::Result<_, Infallible> { Ok(port.to_string()) }
 );
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum PullPolicy {
     Always,
@@ -464,7 +492,7 @@ pub(crate) enum PullPolicy {
     Newer,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "kebab-case")]
 pub(crate) enum RestartPolicy {
     No,
@@ -495,7 +523,7 @@ serde_conv!(
     }
 );
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(untagged)]
 pub(crate) enum ResourceLimit {
     Single(i32),
@@ -503,7 +531,7 @@ pub(crate) enum ResourceLimit {
 }
 
 #[skip_serializing_none]
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub(crate) struct ServiceVolume {
     pub(crate) r#type: ServiceVolumeType,
     pub(crate) source: Option<String>,
@@ -514,7 +542,7 @@ pub(crate) struct ServiceVolume {
     pub(crate) tmpfs: Option<ServiceVolumeTmpfs>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum ServiceVolumeType {
     Volume,
@@ -523,7 +551,7 @@ pub(crate) enum ServiceVolumeType {
 }
 
 #[skip_serializing_none]
-#[derive(Serialize, Deserialize, Default, Debug)]
+#[derive(Serialize, Deserialize, Clone, Default, Debug)]
 pub(crate) struct ServiceVolumeBind {
     pub(crate) propagation: Option<String>,
     pub(crate) create_host_path: Option<bool>,
@@ -537,14 +565,14 @@ impl ServiceVolumeBind {
 }
 
 #[skip_serializing_none]
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub(crate) struct ServiceVolumeVolume {
     pub(crate) nocopy: Option<bool>,
 }
 
 #[skip_serializing_none]
 #[serde_as]
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub(crate) struct ServiceVolumeTmpfs {
     pub(crate) size: Option<Byte>,
     #[serde_as(as = "Option<PickFirst<(_, DisplayFromStr)>>")]

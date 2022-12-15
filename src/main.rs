@@ -1,37 +1,18 @@
 mod commands;
 mod compose;
 mod config;
+mod utils;
 
 use anyhow::Result;
 use clap::Parser;
 use serde::{Deserialize, Serialize};
 use serde_with::{
-    formats::{CommaSeparator, Separator},
-    serde_as, skip_serializing_none, BoolFromInt, PickFirst, StringWithSeparator,
+    formats::CommaSeparator, serde_as, skip_serializing_none, BoolFromInt, PickFirst,
+    StringWithSeparator,
 };
-use std::env;
 
 use commands::Command;
-
-struct PathSeparator;
-
-impl Separator for PathSeparator {
-    fn separator() -> &'static str {
-        Box::leak(
-            env::var("COMPOSE_PATH_SEPARATOR")
-                .unwrap_or_else(|_| {
-                    String::from(if cfg!(unix) {
-                        ":"
-                    } else if cfg!(windows) {
-                        ";"
-                    } else {
-                        unreachable!()
-                    })
-                })
-                .into_boxed_str(),
-        )
-    }
-}
+use utils::PathSeparator;
 
 #[derive(Parser, Debug)]
 #[command(version, about, next_display_order = None)]
