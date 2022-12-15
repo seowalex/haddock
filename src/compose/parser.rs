@@ -34,7 +34,7 @@ fn dollar_or_variable(input: &str) -> IResult<&str, Token> {
 }
 
 fn dollar(input: &str) -> IResult<&str, Token> {
-    value(Token::Str('$'.to_string()), char('$'))(input)
+    value(Token::Str(String::from("$")), char('$'))(input)
 }
 
 fn name(input: &str) -> IResult<&str, &str> {
@@ -130,8 +130,8 @@ fn string(input: &str) -> IResult<&str, Vec<Token>> {
 pub(crate) fn parse(input: &str) -> Result<Vec<Token>> {
     all_consuming(string)(input)
         .finish()
-        .map(|(_, tokens)| tokens)
         .map_err(|_| anyhow!("invalid interpolation format for \"{input}\""))
+        .map(|(_, tokens)| tokens)
 }
 
 #[cfg(test)]

@@ -42,30 +42,23 @@ fn evaluate(tokens: Vec<Token>) -> Result<String> {
                 .or_else(|_| {
                     evaluate(tokens).and_then(|err| {
                         if err.is_empty() {
-                            bail!("Required variable \"{name}\" is missing a value")
+                            bail!("Required variable \"{name}\" is missing a value");
                         }
 
-                        bail!("Required variable \"{name}\" is missing a value: {err}")
+                        bail!("Required variable \"{name}\" is missing a value: {err}");
                     })
                 }),
-                Some(Var::Replace(state, tokens)) => {
-                    if match state {
-                        State::Set => env::var(name),
-                        State::SetAndNonEmpty => env::var(name).and_then(|var| {
-                            if var.is_empty() {
-                                Err(env::VarError::NotPresent)
-                            } else {
-                                Ok(var)
-                            }
-                        }),
-                    }
-                    .is_ok()
-                    {
-                        evaluate(tokens)
-                    } else {
-                        Ok(String::new())
-                    }
+                Some(Var::Replace(state, tokens)) => match state {
+                    State::Set => env::var(name),
+                    State::SetAndNonEmpty => env::var(name).and_then(|var| {
+                        if var.is_empty() {
+                            Err(env::VarError::NotPresent)
+                        } else {
+                            Ok(var)
+                        }
+                    }),
                 }
+                .map_or_else(|_| Ok(String::new()), |_| evaluate(tokens)),
                 None => Ok(env::var(&name).unwrap_or_else(|_| {
                     eprintln!(
                         "{} The \"{name}\" variable is not set, defaulting to a blank string",
@@ -114,7 +107,8 @@ pub(crate) fn parse(config: Config) -> Result<Compose> {
         .into_iter()
         .map(|(path, content)| {
             serde_yaml::from_str(&content)
-                .map(|mut content: Value| {
+                .map_err(Error::from)
+                .and_then(|mut content: Value| {
                     if let Some(values) = content.as_mapping_mut() {
                         if let Some(name) = &config.project_name {
                             values.insert(
@@ -125,40 +119,7 @@ pub(crate) fn parse(config: Config) -> Result<Compose> {
                             values.into_iter().find(|(key, _)| *key == "name")
                         {
                             if name.is_string() {
-                                if let Ok(interpolated_name) = interpolate(name) {
-                                    *name = interpolated_name;
-                                }
-
-                                env::set_var("COMPOSE_PROJECT_NAME", name.as_str().unwrap());
-                            } else if name.is_bool() {
-                                env::set_var(
-                                    "COMPOSE_PROJECT_NAME",
-                                    name.as_bool().unwrap().to_string(),
-                                );
-                            } else if name.is_u64() {
-                                env::set_var(
-                                    "COMPOSE_PROJECT_NAME",
-                                    name.as_u64().unwrap().to_string(),
-                                );
-                            } else if name.is_i64() {
-                                env::set_var(
-                                    "COMPOSE_PROJECT_NAME",
-                                    name.as_i64().unwrap().to_string(),
-                                );
-                            } else if name.is_f64() {
-                                env::set_var(
-                                    "COMPOSE_PROJECT_NAME",
-                                    name.as_f64().unwrap().to_string(),
-                                );
-                            }
-                        } else if let Some((_, name)) =
-                            values.into_iter().find(|(key, _)| *key == "name")
-                        {
-                            if name.is_string() {
-                                if let Ok(interpolated_name) = interpolate(name) {
-                                    *name = interpolated_name;
-                                }
-
+                                *name = interpolate(name)?;
                                 env::set_var("COMPOSE_PROJECT_NAME", name.as_str().unwrap());
                             } else if name.is_bool() {
                                 env::set_var(
@@ -182,8 +143,7 @@ pub(crate) fn parse(config: Config) -> Result<Compose> {
                                 );
                             }
                         } else {
-                            let name = env::current_dir()
-                                .unwrap_or_default()
+                            let name = env::current_dir()?
                                 .file_name()
                                 .unwrap_or_default()
                                 .to_string_lossy()
@@ -194,27 +154,26 @@ pub(crate) fn parse(config: Config) -> Result<Compose> {
                         }
                     }
 
-                    (path, content)
+                    Ok((path, content))
                 })
-                .map_err(Error::from)
         })
         .map(|content| {
             content.and_then(|(path, content)| {
                 interpolate(&content)
-                    .map(|content| (path, content))
                     .map_err(|err| match err.chain().collect::<Vec<_>>().split_last() {
                         Some((err, props)) => {
                             anyhow!("{}: {err}", props.iter().join("."))
                         }
                         None => err,
                     })
+                    .map(|content| (path, content))
             })
         })
         .map(|content| {
             content.and_then(|(path, content)| {
                 serde_yaml::to_string(&content)
-                    .map(|content| (path, content))
                     .map_err(Error::from)
+                    .map(|content| (path, content))
             })
         })
         .map(|content| {

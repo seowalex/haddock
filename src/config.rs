@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use figment::{
     providers::{Env, Serialized},
     Figment,
@@ -7,7 +7,6 @@ use itertools::iproduct;
 use once_cell::sync::Lazy;
 use std::{
     env, fs,
-    io::{Error, ErrorKind},
     path::{Path, PathBuf},
 };
 
@@ -44,10 +43,7 @@ fn find(directory: &Path, files: &Vec<String>) -> Result<PathBuf> {
     if let Some(parent) = directory.parent() {
         find(parent, files)
     } else {
-        Err(Error::new(
-            ErrorKind::NotFound,
-            "Compose file not found in the working directory or its parent directories",
-        ))?
+        bail!("Compose file not found in the working directory or its parent directories");
     }
 }
 
@@ -94,8 +90,8 @@ fn resolve(flags: &Flags) -> Result<Config> {
         .collect::<Result<Vec<_>, _>>()?
     };
 
-    let project_directory = if let Some(dir) = &flags.project_directory {
-        fs::canonicalize(dir)
+    let project_directory = if let Some(dir) = flags.project_directory {
+        fs::canonicalize(&dir)
             .with_context(|| anyhow!("{dir} not found"))?
             .to_string_lossy()
             .to_string()
@@ -128,6 +124,14 @@ pub(crate) fn load(flags: Flags) -> Result<Config> {
         PathBuf::from,
     );
 
-    dotenvy::from_filename(env_file).ok();
+    dotenvy::from_path(&env_file)
+        .or_else(|err| {
+            if flags.env_file.is_some() {
+                Err(err)
+            } else {
+                Ok(())
+            }
+        })
+        .with_context(|| anyhow!("{} not found", env_file.to_string_lossy()))?;
     resolve(&flags)
 }
