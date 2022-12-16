@@ -15,7 +15,7 @@ use std::{
 };
 use yansi::Paint;
 
-use crate::utils::Merge;
+use crate::utils::{DuplicateInsertsLastWinsSet, Merge};
 
 #[skip_serializing_none]
 #[derive(Serialize, Deserialize, Default, Debug)]
@@ -65,7 +65,7 @@ pub(crate) struct Service {
     pub(crate) cgroup_parent: Option<String>,
     #[serde_as(as = "Option<PickFirst<(_, StringWithSeparator::<SpaceSeparator, String>)>>")]
     pub(crate) command: Option<Vec<String>>,
-    #[serde_as(as = "Option<IndexSet<PickFirst<(_, FileReferenceOrString)>>>")]
+    #[serde_as(as = "Option<DuplicateInsertsLastWinsSet<PickFirst<(_, FileReferenceOrString)>>>")]
     pub(crate) configs: Option<IndexSet<FileReference>>,
     pub(crate) container_name: Option<String>,
     #[serde_as(as = "Option<PickFirst<(DurationMicroSeconds, DurationWithSuffix)>>")]
@@ -83,7 +83,7 @@ pub(crate) struct Service {
     pub(crate) depends_on: Option<IndexMap<String, Dependency>>,
     pub(crate) deploy: Option<DeployConfig>,
     pub(crate) device_cgroup_rules: Option<Vec<String>>,
-    #[serde_as(as = "Option<IndexSet<DeviceOrString>>")]
+    #[serde_as(as = "Option<DuplicateInsertsLastWinsSet<DeviceOrString>>")]
     pub(crate) devices: Option<IndexSet<Device>>,
     #[serde_as(as = "Option<OneOrMany<_>>")]
     pub(crate) dns: Option<Vec<String>>,
@@ -131,7 +131,7 @@ pub(crate) struct Service {
     pub(crate) read_only: Option<bool>,
     pub(crate) restart: Option<RestartPolicy>,
     pub(crate) runtime: Option<String>,
-    #[serde_as(as = "Option<IndexSet<PickFirst<(_, FileReferenceOrString)>>>")]
+    #[serde_as(as = "Option<DuplicateInsertsLastWinsSet<PickFirst<(_, FileReferenceOrString)>>>")]
     pub(crate) secrets: Option<IndexSet<FileReference>>,
     pub(crate) security_opt: Option<Vec<String>>,
     pub(crate) shm_size: Option<Byte>,
@@ -147,7 +147,7 @@ pub(crate) struct Service {
     pub(crate) ulimits: Option<IndexMap<String, ResourceLimit>>,
     pub(crate) user: Option<String>,
     pub(crate) userns_mode: Option<String>,
-    #[serde_as(as = "Option<IndexSet<PickFirst<(_, ServiceVolumeOrString)>>>")]
+    #[serde_as(as = "Option<DuplicateInsertsLastWinsSet<PickFirst<(_, ServiceVolumeOrString)>>>")]
     pub(crate) volumes: Option<IndexSet<ServiceVolume>>,
     pub(crate) volumes_from: Option<Vec<String>>,
     pub(crate) working_dir: Option<String>,
@@ -225,7 +225,7 @@ pub(crate) struct BuildConfig {
     pub(crate) pull: Option<bool>,
     pub(crate) shm_size: Option<Byte>,
     pub(crate) target: Option<String>,
-    #[serde_as(as = "Option<IndexSet<PickFirst<(_, FileReferenceOrString)>>>")]
+    #[serde_as(as = "Option<DuplicateInsertsLastWinsSet<PickFirst<(_, FileReferenceOrString)>>>")]
     pub(crate) secrets: Option<IndexSet<FileReference>>,
     pub(crate) tags: Option<Vec<String>>,
     pub(crate) platforms: Option<Vec<String>>,
