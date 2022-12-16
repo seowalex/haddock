@@ -109,75 +109,51 @@ pub(crate) fn parse(config: Config) -> Result<Compose> {
         .map(|(i, (path, content))| {
             serde_yaml::from_str(&content)
                 .with_context(|| anyhow!("{path} is empty"))
-                .and_then(|mut content: Value| {
+                .map(|mut content: Value| {
                     if let Some(values) = content.as_mapping_mut() {
-                        let re = regex!("^[^a-zA-Z0-9]+|[^a-zA-Z0-9_.-]");
-
-                        if let Some(name) = &config.project_name {
-                            values.insert(
-                                Value::String(String::from("name")),
-                                Value::String(re.replace_all(name, "").to_ascii_lowercase()),
-                            );
-                        } else if let Some((_, name)) =
+                        let name = if config.project_name.is_some() {
+                            config.project_name.clone()
+                        } else if let Some((_, n)) =
                             values.into_iter().find(|(key, _)| *key == "name")
                         {
-                            if name.is_string() {
-                                *name = Value::String(
-                                    re.replace_all(name.as_str().unwrap(), "")
-                                        .to_ascii_lowercase(),
-                                );
-                                env::set_var("COMPOSE_PROJECT_NAME", name.as_str().unwrap());
-                            } else if name.is_bool() {
-                                env::set_var(
-                                    "COMPOSE_PROJECT_NAME",
-                                    name.as_bool().unwrap().to_string(),
-                                );
-                            } else if name.is_u64() {
-                                env::set_var(
-                                    "COMPOSE_PROJECT_NAME",
-                                    name.as_u64().unwrap().to_string(),
-                                );
-                            } else if name.is_i64() {
-                                env::set_var(
-                                    "COMPOSE_PROJECT_NAME",
-                                    name.as_i64().unwrap().to_string(),
-                                );
-                            } else if name.is_f64() {
-                                env::set_var(
-                                    "COMPOSE_PROJECT_NAME",
-                                    name.as_f64().unwrap().to_string(),
-                                );
-                            } else if name.is_null() {
-                                let default = re
+                            n.as_str()
+                                .map(ToString::to_string)
+                                .or_else(|| n.as_bool().map(|n| n.to_string()))
+                                .or_else(|| n.as_u64().map(|n| n.to_string()))
+                                .or_else(|| n.as_i64().map(|n| n.to_string()))
+                                .or_else(|| n.as_f64().map(|n| n.to_string()))
+                                .or_else(|| Some(String::new()))
+                        } else if i == 0 {
+                            Some(String::new())
+                        } else {
+                            None
+                        };
+
+                        if let Some(mut name) = name {
+                            let re = regex!(r"^[^a-zA-Z0-9]+|[^a-zA-Z0-9_.-]");
+                            name = re.replace_all(&name, "").to_ascii_lowercase();
+
+                            if name.is_empty() {
+                                name = re
                                     .replace_all(
-                                        &env::current_dir()?
-                                            .file_name()
-                                            .unwrap_or_default()
-                                            .to_string_lossy(),
+                                        &env::current_dir()
+                                            .ok()
+                                            .and_then(|name| {
+                                                name.file_name()
+                                                    .map(|name| name.to_string_lossy().to_string())
+                                            })
+                                            .unwrap_or_default(),
                                         "",
                                     )
                                     .to_ascii_lowercase();
-
-                                env::set_var("COMPOSE_PROJECT_NAME", &default);
-                                *name = Value::String(default);
                             }
-                        } else if i == 0 {
-                            let name = re
-                                .replace_all(
-                                    &env::current_dir()?
-                                        .file_name()
-                                        .unwrap_or_default()
-                                        .to_string_lossy(),
-                                    "",
-                                )
-                                .to_ascii_lowercase();
 
                             env::set_var("COMPOSE_PROJECT_NAME", &name);
                             values.insert(Value::String(String::from("name")), Value::String(name));
                         }
                     }
 
-                    Ok((path, content))
+                    (path, content)
                 })
         })
         .map(|content| {
