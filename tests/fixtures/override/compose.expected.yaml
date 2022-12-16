@@ -1,0 +1,31 @@
+services:
+  myservice:
+    image: flask
+    command: python otherapp.py
+    expose:
+      - "3000"
+      - "4000"
+      - "5000"
+    environment:
+      - FOO=original
+      - BAR
+      - BAZ=local
+    labels:
+      - FOO=original
+      - BAR=local
+      - BAZ=local
+    volumes:
+      - ./original:/foo
+      - ./local:/bar
+      - ./local:/baz
+    devices:
+      - /original:/foo
+      - /local:/bar
+      - /local:/baz
+    configs:
+      - source: foo
+        target: original
+      - source: bar
+        target: local
+      - source: baz
+        target: local

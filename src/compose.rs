@@ -268,6 +268,7 @@ pub(crate) fn parse(config: Config) -> Result<Compose> {
 
 #[cfg(test)]
 mod tests {
+    use pretty_assertions::assert_eq;
     use serde_yaml::Value;
 
     use super::*;

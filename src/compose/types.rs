@@ -830,6 +830,7 @@ pub(crate) struct Secret {
 
 #[cfg(test)]
 mod tests {
+    use pretty_assertions::assert_eq;
     use std::fs;
     use test_generator::test_resources;
 
@@ -840,5 +841,21 @@ mod tests {
         let contents = fs::read_to_string(resource).unwrap();
 
         assert!(serde_yaml::from_str::<Compose>(&contents).is_ok());
+    }
+
+    #[test]
+    fn merge() {
+        let base = fs::read_to_string("tests/fixtures/override/compose.yaml").unwrap();
+        let other = fs::read_to_string("tests/fixtures/override/compose.override.yaml").unwrap();
+
+        let mut result = serde_yaml::from_str::<Compose>(&base).unwrap();
+        result.merge(serde_yaml::from_str(&other).unwrap());
+
+        let expected = fs::read_to_string("tests/fixtures/override/compose.expected.yaml").unwrap();
+
+        assert_eq!(
+            format!("{result:#?}"),
+            format!("{:#?}", serde_yaml::from_str::<Compose>(&expected).unwrap())
+        );
     }
 }

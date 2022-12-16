@@ -1,0 +1,23 @@
+services:
+  myservice:
+    image: redis
+    command: python app.py
+    expose:
+      - "3000"
+    environment:
+      - FOO=original
+      - BAR=original
+    labels:
+      - FOO=original
+      - BAR=original
+    volumes:
+      - ./original:/foo
+      - ./original:/bar
+    devices:
+      - /original:/foo
+      - /original:/bar
+    configs:
+      - source: foo
+        target: original
+      - source: bar
+        target: original
