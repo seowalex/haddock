@@ -1,7 +1,10 @@
-use anyhow::Result;
+use anyhow::{anyhow, Context, Result};
 use clap::ValueEnum;
 use indexmap::IndexSet;
-use std::fs;
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 use crate::{compose, config::Config};
 
@@ -82,7 +85,15 @@ pub(crate) fn run(args: Args, config: Config) -> Result<()> {
                     let contents = serde_yaml::to_string(&file)?;
 
                     if let Some(path) = args.output {
-                        fs::write(path, contents)?;
+                        fs::write(&path, contents).with_context(|| {
+                            anyhow!(
+                                "{} not found",
+                                PathBuf::from(path)
+                                    .parent()
+                                    .unwrap_or_else(|| Path::new("/"))
+                                    .to_string_lossy()
+                            )
+                        })?;
                     } else {
                         print!("{contents}");
                     }
@@ -92,7 +103,15 @@ pub(crate) fn run(args: Args, config: Config) -> Result<()> {
                     contents.push('\n');
 
                     if let Some(path) = args.output {
-                        fs::write(path, contents)?;
+                        fs::write(&path, contents).with_context(|| {
+                            anyhow!(
+                                "{} not found",
+                                PathBuf::from(path)
+                                    .parent()
+                                    .unwrap_or_else(|| Path::new("/"))
+                                    .to_string_lossy()
+                            )
+                        })?;
                     } else {
                         print!("{contents}");
                     }

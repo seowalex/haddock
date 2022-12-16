@@ -125,13 +125,13 @@ pub(crate) fn load(flags: Flags) -> Result<Config> {
     );
 
     dotenvy::from_path(&env_file)
+        .with_context(|| anyhow!("{} not found", env_file.to_string_lossy()))
         .or_else(|err| {
             if flags.env_file.is_some() {
                 Err(err)
             } else {
                 Ok(())
             }
-        })
-        .with_context(|| anyhow!("{} not found", env_file.to_string_lossy()))?;
+        })?;
     resolve(&flags)
 }

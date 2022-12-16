@@ -22,6 +22,7 @@ use crate::utils::Merge;
 pub(crate) struct Compose {
     pub(crate) version: Option<String>,
     pub(crate) name: Option<String>,
+    #[serde(default)]
     pub(crate) services: IndexMap<String, Service>,
     pub(crate) networks: Option<IndexMap<String, Option<Network>>>,
     pub(crate) volumes: Option<IndexMap<String, Option<Volume>>>,

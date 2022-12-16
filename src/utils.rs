@@ -1,6 +1,15 @@
 use serde_with::formats::Separator;
 use std::env;
 
+macro_rules! regex {
+    ($re:literal $(,)?) => {{
+        static RE: once_cell::sync::OnceCell<regex::Regex> = once_cell::sync::OnceCell::new();
+        RE.get_or_init(|| regex::Regex::new($re).unwrap())
+    }};
+}
+
+pub(crate) use regex;
+
 pub(crate) struct PathSeparator;
 
 impl Separator for PathSeparator {
