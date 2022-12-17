@@ -153,13 +153,22 @@ pub(crate) struct Service {
     pub(crate) working_dir: Option<String>,
 }
 
+impl Service {
+    pub(crate) fn merge(&mut self, other: &Self) {
+        let mut value = serde_yaml::to_value(&self).unwrap();
+        merge(&mut value, serde_yaml::to_value(other).unwrap());
+
+        *self = serde_yaml::from_value(value).unwrap();
+    }
+}
+
 fn merge(base: &mut Value, other: Value) {
     match (base, other) {
         (base @ Value::Mapping(_), Value::Mapping(other)) => {
-            let a = base.as_mapping_mut().unwrap();
+            let base = base.as_mapping_mut().unwrap();
 
             for (key, other_value) in other {
-                a.entry(key.clone())
+                base.entry(key.clone())
                     .and_modify(|value| match key.as_str().unwrap() {
                         "command" | "entrypoint" => *value = other_value.clone(),
                         _ => merge(value, other_value.clone()),
@@ -171,15 +180,6 @@ fn merge(base: &mut Value, other: Value) {
             base.extend(other);
         }
         (base, other) => *base = other,
-    }
-}
-
-impl Service {
-    pub(crate) fn merge(&mut self, other: &Self) {
-        let mut value = serde_yaml::to_value(&self).unwrap();
-        merge(&mut value, serde_yaml::to_value(other).unwrap());
-
-        *self = serde_yaml::from_value(value).unwrap();
     }
 }
 

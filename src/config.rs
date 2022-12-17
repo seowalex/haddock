@@ -5,8 +5,9 @@ use figment::{
 };
 use itertools::iproduct;
 use once_cell::sync::Lazy;
+use path_absolutize::Absolutize;
 use std::{
-    env, fs,
+    env,
     path::{Path, PathBuf},
 };
 
@@ -57,7 +58,8 @@ fn resolve(flags: &Flags) -> Result<Config> {
         files
             .iter()
             .map(|file| {
-                fs::canonicalize(file)
+                Path::new(file)
+                    .absolutize()
                     .with_context(|| anyhow!("{file} not found"))
                     .map(|file| file.to_string_lossy().to_string())
             })
@@ -83,7 +85,7 @@ fn resolve(flags: &Flags) -> Result<Config> {
         }
         .into_iter()
         .map(|file| {
-            file.canonicalize()
+            file.absolutize()
                 .with_context(|| anyhow!("{} not found", file.to_string_lossy()))
                 .map(|file| file.to_string_lossy().to_string())
         })
@@ -91,7 +93,8 @@ fn resolve(flags: &Flags) -> Result<Config> {
     };
 
     let project_directory = if let Some(dir) = flags.project_directory {
-        fs::canonicalize(&dir)
+        Path::new(&dir)
+            .absolutize()
             .with_context(|| anyhow!("{dir} not found"))?
             .to_string_lossy()
             .to_string()
@@ -101,7 +104,7 @@ fn resolve(flags: &Flags) -> Result<Config> {
             .unwrap_or_else(|| Path::new("/"));
 
         parent
-            .canonicalize()
+            .absolutize()
             .with_context(|| anyhow!("{} not found", parent.to_string_lossy()))?
             .to_string_lossy()
             .to_string()

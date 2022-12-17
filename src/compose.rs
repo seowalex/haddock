@@ -2,6 +2,7 @@ mod parser;
 mod types;
 
 use anyhow::{anyhow, bail, Context, Error, Result};
+use clap::crate_name;
 use indexmap::IndexSet;
 use itertools::Itertools;
 use serde_yaml::Value;
@@ -108,7 +109,7 @@ pub(crate) fn parse(config: Config) -> Result<Compose> {
         .enumerate()
         .map(|(i, (path, content))| {
             serde_yaml::from_str(&content)
-                .with_context(|| anyhow!("{path} is empty"))
+                .map_err(Error::from)
                 .map(|mut content: Value| {
                     if let Some(values) = content.as_mapping_mut() {
                         let name = if config.project_name.is_some() {
@@ -142,7 +143,7 @@ pub(crate) fn parse(config: Config) -> Result<Compose> {
                                                 name.file_name()
                                                     .map(|name| name.to_string_lossy().to_string())
                                             })
-                                            .unwrap_or_default(),
+                                            .unwrap_or_else(|| crate_name!().to_string()),
                                         "",
                                     )
                                     .to_ascii_lowercase();
@@ -223,7 +224,7 @@ pub(crate) fn parse(config: Config) -> Result<Compose> {
                         || network.internal.is_some()
                         || network.labels.is_some())
                 {
-                    bail!("Conflicting parameters for network \"{name}\"");
+                    bail!("Conflicting parameters specified for network \"{name}\"");
                 }
             }
         }
@@ -237,7 +238,7 @@ pub(crate) fn parse(config: Config) -> Result<Compose> {
                         || volume.driver_opts.is_some()
                         || volume.labels.is_some())
                 {
-                    bail!("Conflicting parameters for volume \"{name}\"");
+                    bail!("Conflicting parameters specified for volume \"{name}\"");
                 }
             }
         }
@@ -246,7 +247,7 @@ pub(crate) fn parse(config: Config) -> Result<Compose> {
     if let Some(configs) = &combined_file.configs {
         for (name, config) in configs {
             if config.external.unwrap_or_default() && config.file.is_some() {
-                bail!("Conflicting parameters for config \"{name}\"");
+                bail!("Conflicting parameters specified for config \"{name}\"");
             }
         }
     }
@@ -256,7 +257,7 @@ pub(crate) fn parse(config: Config) -> Result<Compose> {
             if secret.external.unwrap_or_default()
                 && (secret.file.is_some() || secret.environment.is_some())
             {
-                bail!("Conflicting parameters for secret \"{name}\"");
+                bail!("Conflicting parameters specified for secret \"{name}\"");
             }
         }
     }
