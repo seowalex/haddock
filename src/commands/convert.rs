@@ -91,7 +91,7 @@ pub(crate) fn run(args: Args, config: Config) -> Result<()> {
                                 PathBuf::from(path)
                                     .parent()
                                     .unwrap_or_else(|| Path::new("/"))
-                                    .to_string_lossy()
+                                    .display()
                             )
                         })?;
                     } else {
@@ -109,7 +109,7 @@ pub(crate) fn run(args: Args, config: Config) -> Result<()> {
                                 PathBuf::from(path)
                                     .parent()
                                     .unwrap_or_else(|| Path::new("/"))
-                                    .to_string_lossy()
+                                    .display()
                             )
                         })?;
                     } else {

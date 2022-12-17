@@ -90,7 +90,7 @@ fn resolve(flags: &Flags) -> Result<Config> {
         .into_iter()
         .map(|file| {
             file.absolutize()
-                .with_context(|| anyhow!("{} not found", file.to_string_lossy()))
+                .with_context(|| anyhow!("{} not found", file.display()))
                 .map(|file| file.to_string_lossy().to_string())
         })
         .collect::<Result<Vec<_>, _>>()?
@@ -109,7 +109,7 @@ fn resolve(flags: &Flags) -> Result<Config> {
 
         parent
             .absolutize()
-            .with_context(|| anyhow!("{} not found", parent.to_string_lossy()))?
+            .with_context(|| anyhow!("{} not found", parent.display()))?
             .to_string_lossy()
             .to_string()
     };
@@ -132,7 +132,7 @@ pub(crate) fn load(flags: Flags) -> Result<Config> {
     );
 
     dotenvy::from_path(&env_file)
-        .with_context(|| anyhow!("{} not found", env_file.to_string_lossy()))
+        .with_context(|| anyhow!("{} not found", env_file.display()))
         .or_else(|err| {
             if flags.env_file.is_some() {
                 Err(err)
