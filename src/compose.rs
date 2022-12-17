@@ -221,6 +221,22 @@ pub(crate) fn parse(config: Config) -> Result<Compose> {
         combined_file.merge(file);
     }
 
+    combined_file.services.retain(|_, service| {
+        service.profiles.as_ref().map_or(true, |profiles| {
+            if profiles.is_empty() {
+                return true;
+            }
+
+            for profile in profiles {
+                if config.profiles.contains(profile) {
+                    return true;
+                }
+            }
+
+            false
+        })
+    });
+
     for service in combined_file.services.values_mut() {
         if let Some(build) = &mut service.build {
             build.dockerfile = build
