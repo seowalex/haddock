@@ -1,16 +1,19 @@
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, bail, Error, Result};
 use byte_unit::Byte;
 use humantime::{format_duration, parse_duration};
 use indexmap::{IndexMap, IndexSet};
+use path_absolutize::Absolutize;
 use serde::{Deserialize, Serialize};
 use serde_with::{
-    formats::SpaceSeparator, serde_as, serde_conv, skip_serializing_none, DisplayFromStr,
-    DurationMicroSeconds, OneOrMany, PickFirst, StringWithSeparator,
+    formats::{PreferMany, SpaceSeparator},
+    serde_as, serde_conv, skip_serializing_none, DisplayFromStr, DurationMicroSeconds, OneOrMany,
+    PickFirst, StringWithSeparator,
 };
 use serde_yaml::Value;
 use std::{
     convert::Infallible,
     hash::{Hash, Hasher},
+    path::{Path, PathBuf},
     time::Duration,
 };
 use yansi::Paint;
@@ -85,21 +88,21 @@ pub(crate) struct Service {
     pub(crate) device_cgroup_rules: Option<Vec<String>>,
     #[serde_as(as = "Option<DuplicateInsertsLastWinsSet<DeviceOrString>>")]
     pub(crate) devices: Option<IndexSet<Device>>,
-    #[serde_as(as = "Option<OneOrMany<_>>")]
+    #[serde_as(as = "Option<OneOrMany<_, PreferMany>>")]
     pub(crate) dns: Option<Vec<String>>,
     pub(crate) dns_opt: Option<Vec<String>>,
-    #[serde_as(as = "Option<OneOrMany<_>>")]
+    #[serde_as(as = "Option<OneOrMany<_, PreferMany>>")]
     pub(crate) dns_search: Option<Vec<String>>,
     #[serde_as(as = "Option<PickFirst<(_, StringWithSeparator::<SpaceSeparator, String>)>>")]
     pub(crate) entrypoint: Option<Vec<String>>,
-    #[serde_as(as = "Option<OneOrMany<_>>")]
-    pub(crate) env_file: Option<Vec<String>>,
+    #[serde_as(as = "Option<OneOrMany<AbsPathBuf, PreferMany>>")]
+    pub(crate) env_file: Option<Vec<PathBuf>>,
     #[serde_as(as = "Option<PickFirst<(_, MappingWithEqualsNull)>>")]
     pub(crate) environment: Option<IndexMap<String, Option<String>>>,
     pub(crate) expose: Option<Vec<String>>,
-    pub(crate) extends: Option<Extends>,
     pub(crate) external_links: Option<Vec<String>>,
-    pub(crate) extra_hosts: Option<Vec<String>>,
+    #[serde_as(as = "Option<PickFirst<(_, MappingWithColonEmpty)>>")]
+    pub(crate) extra_hosts: Option<IndexMap<String, String>>,
     pub(crate) group_add: Option<Vec<String>>,
     pub(crate) healthcheck: Option<Healthcheck>,
     pub(crate) hostname: Option<String>,
@@ -139,10 +142,10 @@ pub(crate) struct Service {
     pub(crate) stop_grace_period: Option<Duration>,
     pub(crate) stop_signal: Option<String>,
     pub(crate) storage_opt: Option<IndexMap<String, String>>,
-    #[serde_as(as = "Option<PickFirst<(_, MappingWithEqualsNoNull)>>")]
+    #[serde_as(as = "Option<PickFirst<(_, StringOrUsizeMap, MappingWithEqualsNoNull)>>")]
     pub(crate) sysctls: Option<IndexMap<String, String>>,
-    #[serde_as(as = "Option<OneOrMany<_>>")]
-    pub(crate) tmpfs: Option<Vec<String>>,
+    #[serde_as(as = "Option<OneOrMany<_, PreferMany>>")]
+    pub(crate) tmpfs: Option<Vec<PathBuf>>,
     pub(crate) tty: Option<bool>,
     pub(crate) ulimits: Option<IndexMap<String, ResourceLimit>>,
     pub(crate) user: Option<String>,
@@ -150,7 +153,7 @@ pub(crate) struct Service {
     #[serde_as(as = "Option<DuplicateInsertsLastWinsSet<PickFirst<(_, ServiceVolumeOrString)>>>")]
     pub(crate) volumes: Option<IndexSet<ServiceVolume>>,
     pub(crate) volumes_from: Option<Vec<String>>,
-    pub(crate) working_dir: Option<String>,
+    pub(crate) working_dir: Option<PathBuf>,
 }
 
 impl Service {
@@ -194,15 +197,19 @@ pub(crate) struct BlkioConfig {
     pub(crate) device_write_iops: Option<Vec<ThrottleDevice>>,
 }
 
+#[serde_as]
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct WeightDevice {
-    pub(crate) path: String,
+    #[serde_as(as = "AbsPathBuf")]
+    pub(crate) path: PathBuf,
     pub(crate) weight: u16,
 }
 
+#[serde_as]
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct ThrottleDevice {
-    pub(crate) path: String,
+    #[serde_as(as = "AbsPathBuf")]
+    pub(crate) path: PathBuf,
     pub(crate) rate: Byte,
 }
 
@@ -210,14 +217,18 @@ pub(crate) struct ThrottleDevice {
 #[serde_as]
 #[derive(Serialize, Deserialize, Default, Debug)]
 pub(crate) struct BuildConfig {
-    pub(crate) context: String,
-    pub(crate) dockerfile: Option<String>,
+    #[serde_as(as = "AbsPathBuf")]
+    pub(crate) context: PathBuf,
+    #[serde(default = "default_dockerfile")]
+    pub(crate) dockerfile: PathBuf,
     #[serde_as(as = "Option<PickFirst<(_, MappingWithEqualsNull)>>")]
     pub(crate) args: Option<IndexMap<String, Option<String>>>,
-    pub(crate) ssh: Option<Vec<String>>,
+    #[serde_as(as = "Option<PickFirst<(MappingWithEqualsNullSerialiseAsColon, _)>>")]
+    pub(crate) ssh: Option<IndexMap<String, Option<String>>>,
     pub(crate) cache_from: Option<Vec<String>>,
     pub(crate) cache_to: Option<Vec<String>>,
-    pub(crate) extra_hosts: Option<Vec<String>>,
+    #[serde_as(as = "Option<PickFirst<(_, MappingWithColonEmpty)>>")]
+    pub(crate) extra_hosts: Option<IndexMap<String, String>>,
     pub(crate) isolation: Option<String>,
     #[serde_as(as = "Option<PickFirst<(_, MappingWithEqualsEmpty)>>")]
     pub(crate) labels: Option<IndexMap<String, String>>,
@@ -231,24 +242,16 @@ pub(crate) struct BuildConfig {
     pub(crate) platforms: Option<Vec<String>>,
 }
 
-serde_conv!(
-    BuildConfigOrString,
-    BuildConfig,
-    |build: &BuildConfig| { build.context.clone() },
-    |context| -> std::result::Result<_, Infallible> {
-        Ok(BuildConfig {
-            context,
-            ..BuildConfig::default()
-        })
-    }
-);
+fn default_dockerfile() -> PathBuf {
+    PathBuf::from("Dockerfile")
+}
 
 #[skip_serializing_none]
 #[serde_as]
 #[derive(Serialize, Deserialize, Default, Debug)]
 pub(crate) struct FileReference {
     pub(crate) source: String,
-    pub(crate) target: Option<String>,
+    pub(crate) target: Option<PathBuf>,
     pub(crate) uid: Option<String>,
     pub(crate) gid: Option<String>,
     #[serde_as(as = "Option<PickFirst<(_, DisplayFromStr)>>")]
@@ -269,25 +272,6 @@ impl Hash for FileReference {
     }
 }
 
-serde_conv!(
-    FileReferenceOrString,
-    FileReference,
-    |file_reference: &FileReference| { file_reference.source.clone() },
-    |source| -> std::result::Result<_, Infallible> {
-        Ok(FileReference {
-            source,
-            ..Default::default()
-        })
-    }
-);
-
-serde_conv!(
-    DurationWithSuffix,
-    Duration,
-    |duration: &Duration| format_duration(*duration).to_string(),
-    |duration: String| parse_duration(&duration)
-);
-
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct Dependency {
     pub(crate) condition: Condition,
@@ -302,24 +286,6 @@ pub(crate) enum Condition {
     #[serde(rename = "service_completed_successfully")]
     CompletedSuccessfully,
 }
-
-serde_conv!(
-    DependsOnVec,
-    IndexMap<String, Dependency>,
-    |dependencies: &IndexMap<String, Dependency>| dependencies.keys().cloned().collect::<Vec<_>>(),
-    |dependencies: Vec<String>| -> std::result::Result<_, Infallible> {
-        Ok(dependencies.into_iter().map(
-            |dependency| {
-                (
-                    dependency,
-                    Dependency {
-                        condition: Condition::Started,
-                    },
-                )
-            },
-        ).collect::<IndexMap<_, _>>())
-    }
-);
 
 #[skip_serializing_none]
 #[derive(Serialize, Deserialize, Debug)]
@@ -345,10 +311,12 @@ pub(crate) struct Resource {
 }
 
 #[skip_serializing_none]
+#[serde_as]
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct Device {
-    pub(crate) source: String,
-    pub(crate) target: String,
+    #[serde_as(as = "AbsPathBuf")]
+    pub(crate) source: PathBuf,
+    pub(crate) target: PathBuf,
     pub(crate) permissions: Option<String>,
 }
 
@@ -366,57 +334,6 @@ impl Hash for Device {
     }
 }
 
-serde_conv!(
-    DeviceOrString,
-    Device,
-    |device: &Device| {
-        if let Some(permissions) = &device.permissions {
-            format!("{}:{}:{permissions}", device.source, device.target)
-        } else {
-            format!("{}:{}", device.source, device.target)
-        }
-    },
-    |device: String| -> std::result::Result<_, Infallible> {
-        let mut parts = device.split(':');
-
-        Ok(Device {
-            source: parts.next().unwrap().to_string(),
-            target: parts.next().unwrap().to_string(),
-            permissions: parts.next().map(ToString::to_string),
-        })
-    }
-);
-
-serde_conv!(
-    MappingWithEqualsNull,
-    IndexMap<String, Option<String>>,
-    |variables: &IndexMap<String, Option<String>>| {
-        variables
-            .iter()
-            .map(|(key, value)| match value {
-                Some(value) => format!("{key}={value}"),
-                None => key.clone(),
-            })
-            .collect::<Vec<_>>()
-    },
-    |variables: Vec<String>| -> std::result::Result<_, Infallible> {
-        Ok(variables.into_iter().map(|variable| {
-            let mut parts = variable.split('=');
-            (
-                parts.next().unwrap().to_string(),
-                parts.next().map(ToString::to_string),
-            )
-        }).collect::<IndexMap<_, _>>())
-    }
-);
-
-#[skip_serializing_none]
-#[derive(Serialize, Deserialize, Debug)]
-pub(crate) struct Extends {
-    pub(crate) service: String,
-    pub(crate) file: Option<String>,
-}
-
 #[skip_serializing_none]
 #[serde_as]
 #[derive(Serialize, Deserialize, Debug)]
@@ -432,32 +349,6 @@ pub(crate) struct Healthcheck {
     pub(crate) retries: Option<u64>,
     pub(crate) disable: Option<bool>,
 }
-
-serde_conv!(
-    MappingWithEqualsEmpty,
-    IndexMap<String, String>,
-    |variables: &IndexMap<String, String>| {
-        variables
-            .iter()
-            .map(|(key, value)| {
-                if value.is_empty() {
-                    key.clone()
-                } else {
-                    format!("{key}={value}")
-                }
-            })
-            .collect::<Vec<_>>()
-    },
-    |variables: Vec<String>| -> std::result::Result<_, Infallible> {
-        Ok(variables.into_iter().map(|variable| {
-            let mut parts = variable.split('=');
-            (
-                parts.next().unwrap().to_string(),
-                parts.next().map(ToString::to_string).unwrap_or_default(),
-            )
-        }).collect::<IndexMap<_, _>>())
-    }
-);
 
 #[skip_serializing_none]
 #[derive(Serialize, Deserialize, Debug)]
@@ -483,15 +374,6 @@ pub(crate) struct ServiceNetwork {
     pub(crate) priority: Option<i32>,
 }
 
-serde_conv!(
-    NetworksVec,
-    IndexMap<String, Option<ServiceNetwork>>,
-    |networks: &IndexMap<String, Option<ServiceNetwork>>| networks.keys().cloned().collect::<Vec<_>>(),
-    |networks: Vec<String>| -> std::result::Result<_, Infallible> {
-        Ok(networks.into_iter().map(|network| (network, None)).collect::<IndexMap<_, _>>())
-    }
-);
-
 #[skip_serializing_none]
 #[serde_as]
 #[derive(Serialize, Deserialize, Default, Debug)]
@@ -501,71 +383,13 @@ pub(crate) struct Port {
     #[serde_as(as = "Option<PickFirst<(_, StringOrU16)>>")]
     pub(crate) published: Option<String>,
     pub(crate) host_ip: Option<String>,
-    pub(crate) protocol: Option<String>,
+    #[serde(default = "default_protocol")]
+    pub(crate) protocol: String,
 }
 
-serde_conv!(
-    PortOrString,
-    Port,
-    |port: &Port| {
-        let mut string = port.target.clone();
-
-        match (&port.published, &port.host_ip) {
-            (None, None) => {}
-            (published, host_ip) => {
-                string = format!("{}:{string}", published.clone().unwrap_or_default());
-
-                if let Some(host_ip) = host_ip {
-                    string = format!("{host_ip}:{string}");
-                }
-            }
-        }
-
-        if let Some(protocol) = &port.protocol {
-            string = format!("{string}/{protocol}");
-        }
-
-        string
-    },
-    |port: String| -> std::result::Result<_, Infallible> {
-        let mut parts = port.split(':').rev();
-        let container_port = parts.next().unwrap();
-        let mut container_parts = container_port.split('/');
-        let target = container_parts.next().unwrap().to_string();
-
-        Ok(Port {
-            target,
-            published: parts.next().and_then(|part| {
-                if part.is_empty() {
-                    None
-                } else {
-                    Some(part.to_string())
-                }
-            }),
-            host_ip: parts.next().map(ToString::to_string),
-            protocol: container_parts.next().map(ToString::to_string),
-        })
-    }
-);
-
-serde_conv!(
-    PortOrU32,
-    Port,
-    |port: &Port| port.target.parse::<u32>().unwrap(),
-    |target: u32| -> std::result::Result<_, Infallible> {
-        Ok(Port {
-            target: target.to_string(),
-            ..Default::default()
-        })
-    }
-);
-
-serde_conv!(
-    StringOrU16,
-    String,
-    |port: &String| port.parse::<u16>().unwrap(),
-    |port: u16| -> std::result::Result<_, Infallible> { Ok(port.to_string()) }
-);
+fn default_protocol() -> String {
+    String::from("tcp")
+}
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "snake_case")]
@@ -586,28 +410,6 @@ pub(crate) enum RestartPolicy {
     UnlessStopped,
 }
 
-serde_conv!(
-    MappingWithEqualsNoNull,
-    IndexMap<String, String>,
-    |variables: &IndexMap<String, String>| {
-        variables
-            .iter()
-            .map(|(key, value)| format!("{key}={value}"))
-            .collect::<Vec<_>>()
-    },
-    |variables: Vec<String>| -> Result<_> {
-        let variables = variables.into_iter().map(|variable| -> Result<_> {
-            let mut parts = variable.split('=');
-            let key = parts.next().unwrap().to_string();
-            let value = parts.next().map(ToString::to_string).ok_or_else(|| anyhow!("{key}: value not defined"))?;
-
-            Ok((key, value))
-        }).collect::<Result<Vec<_>, _>>()?;
-
-        Ok(variables.into_iter().collect::<IndexMap<_, _>>())
-    }
-);
-
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(untagged)]
 pub(crate) enum ResourceLimit {
@@ -620,7 +422,7 @@ pub(crate) enum ResourceLimit {
 pub(crate) struct ServiceVolume {
     pub(crate) r#type: ServiceVolumeType,
     pub(crate) source: Option<String>,
-    pub(crate) target: String,
+    pub(crate) target: PathBuf,
     pub(crate) read_only: Option<bool>,
     pub(crate) bind: Option<ServiceVolumeBind>,
     pub(crate) volume: Option<ServiceVolumeVolume>,
@@ -677,6 +479,356 @@ pub(crate) struct ServiceVolumeTmpfs {
     #[serde_as(as = "Option<PickFirst<(_, DisplayFromStr)>>")]
     pub(crate) mode: Option<u32>,
 }
+
+#[skip_serializing_none]
+#[serde_as]
+#[derive(Serialize, Deserialize, Debug)]
+pub(crate) struct Network {
+    pub(crate) driver: Option<String>,
+    pub(crate) driver_opts: Option<IndexMap<String, String>>,
+    pub(crate) enable_ipv6: Option<bool>,
+    pub(crate) ipam: Option<IpamConfig>,
+    pub(crate) internal: Option<bool>,
+    #[serde_as(as = "Option<PickFirst<(_, MappingWithEqualsEmpty)>>")]
+    pub(crate) labels: Option<IndexMap<String, String>>,
+    pub(crate) external: Option<bool>,
+    pub(crate) name: Option<String>,
+}
+
+#[skip_serializing_none]
+#[derive(Serialize, Deserialize, Debug)]
+pub(crate) struct IpamConfig {
+    pub(crate) driver: Option<String>,
+    pub(crate) config: Option<Vec<IpamPool>>,
+}
+
+#[skip_serializing_none]
+#[derive(Serialize, Deserialize, Debug)]
+pub(crate) struct IpamPool {
+    pub(crate) subnet: Option<String>,
+    pub(crate) ip_range: Option<String>,
+    pub(crate) gateway: Option<String>,
+}
+
+#[skip_serializing_none]
+#[serde_as]
+#[derive(Serialize, Deserialize, Debug)]
+pub(crate) struct Volume {
+    pub(crate) driver: Option<String>,
+    pub(crate) driver_opts: Option<IndexMap<String, String>>,
+    pub(crate) external: Option<bool>,
+    #[serde_as(as = "Option<PickFirst<(_, MappingWithEqualsEmpty)>>")]
+    pub(crate) labels: Option<IndexMap<String, String>>,
+    pub(crate) name: Option<String>,
+}
+
+#[skip_serializing_none]
+#[serde_as]
+#[derive(Serialize, Deserialize, Debug)]
+pub(crate) struct Config {
+    #[serde_as(as = "Option<AbsPathBuf>")]
+    pub(crate) file: Option<PathBuf>,
+    pub(crate) external: Option<bool>,
+    pub(crate) name: Option<String>,
+}
+
+#[skip_serializing_none]
+#[serde_as]
+#[derive(Serialize, Deserialize, Debug)]
+pub(crate) struct Secret {
+    #[serde_as(as = "Option<AbsPathBuf>")]
+    pub(crate) file: Option<PathBuf>,
+    pub(crate) environment: Option<String>,
+    pub(crate) external: Option<bool>,
+    pub(crate) name: Option<String>,
+}
+
+serde_conv!(
+    AbsPathBuf,
+    PathBuf,
+    |path: &PathBuf| { path.to_string_lossy().to_string() },
+    |path: String| -> Result<_> {
+        Path::new(&path)
+            .absolutize()
+            .map_err(Error::from)
+            .map(|path| path.to_path_buf())
+    }
+);
+
+serde_conv!(
+    BuildConfigOrString,
+    BuildConfig,
+    |build: &BuildConfig| { build.context.clone() },
+    |context: PathBuf| -> Result<_> {
+        context
+            .absolutize()
+            .map_err(Error::from)
+            .map(|context| BuildConfig {
+                context: context.to_path_buf(),
+                dockerfile: PathBuf::from("Dockerfile"),
+                ..BuildConfig::default()
+            })
+    }
+);
+
+serde_conv!(
+    DependsOnVec,
+    IndexMap<String, Dependency>,
+    |dependencies: &IndexMap<String, Dependency>| dependencies.keys().cloned().collect::<Vec<_>>(),
+    |dependencies: Vec<String>| -> std::result::Result<_, Infallible> {
+        Ok(dependencies.into_iter().map(
+            |dependency| {
+                (
+                    dependency,
+                    Dependency {
+                        condition: Condition::Started,
+                    },
+                )
+            },
+        ).collect::<IndexMap<_, _>>())
+    }
+);
+
+serde_conv!(
+    DeviceOrString,
+    Device,
+    |device: &Device| {
+        if let Some(permissions) = &device.permissions {
+            format!(
+                "{}:{}:{permissions}",
+                device.source.display(),
+                device.target.display(),
+            )
+        } else {
+            format!("{}:{}", device.source.display(), device.target.display())
+        }
+    },
+    |device: String| -> Result<_> {
+        let mut parts = device.split(':');
+
+        Ok(Device {
+            source: parts
+                .next()
+                .map(|source| {
+                    Path::new(source)
+                        .absolutize()
+                        .map(|source| source.to_path_buf())
+                })
+                .transpose()?
+                .unwrap(),
+            target: parts.next().map(PathBuf::from).unwrap(),
+            permissions: parts.next().map(ToString::to_string),
+        })
+    }
+);
+
+serde_conv!(
+    DurationWithSuffix,
+    Duration,
+    |duration: &Duration| format_duration(*duration).to_string(),
+    |duration: String| parse_duration(&duration)
+);
+
+serde_conv!(
+    FileReferenceOrString,
+    FileReference,
+    |file_reference: &FileReference| { file_reference.source.clone() },
+    |source| -> std::result::Result<_, Infallible> {
+        Ok(FileReference {
+            source,
+            ..Default::default()
+        })
+    }
+);
+
+serde_conv!(
+    MappingWithColonEmpty,
+    IndexMap<String, String>,
+    |variables: &IndexMap<String, String>| {
+        variables
+            .iter()
+            .map(|(key, value)| {
+                if value.is_empty() {
+                    key.clone()
+                } else {
+                    format!("{key}: {value}")
+                }
+            })
+            .collect::<Vec<_>>()
+    },
+    |variables: Vec<String>| -> std::result::Result<_, Infallible> {
+        Ok(variables.into_iter().map(|variable| {
+            let mut parts = variable.split(':');
+            (
+                parts.next().unwrap().to_string(),
+                parts.next().map(ToString::to_string).unwrap_or_default(),
+            )
+        }).collect::<IndexMap<_, _>>())
+    }
+);
+
+serde_conv!(
+    MappingWithEqualsNullSerialiseAsColon,
+    IndexMap<String, Option<String>>,
+    |variables: &IndexMap<String, Option<String>>| {
+        variables
+            .iter()
+            .map(|(key, value)| match value {
+                Some(value) => format!("{key}: {value}"),
+                None => key.clone(),
+            })
+            .collect::<Vec<_>>()
+    },
+    |variables: Vec<String>| -> std::result::Result<_, Infallible> {
+        Ok(variables.into_iter().map(|variable| {
+            let mut parts = variable.split('=');
+            (
+                parts.next().unwrap().to_string(),
+                parts.next().map(ToString::to_string),
+            )
+        }).collect::<IndexMap<_, _>>())
+    }
+);
+
+serde_conv!(
+    MappingWithEqualsEmpty,
+    IndexMap<String, String>,
+    |variables: &IndexMap<String, String>| {
+        variables
+            .iter()
+            .map(|(key, value)| {
+                if value.is_empty() {
+                    key.clone()
+                } else {
+                    format!("{key}={value}")
+                }
+            })
+            .collect::<Vec<_>>()
+    },
+    |variables: Vec<String>| -> std::result::Result<_, Infallible> {
+        Ok(variables.into_iter().map(|variable| {
+            let mut parts = variable.split('=');
+            (
+                parts.next().unwrap().to_string(),
+                parts.next().map(ToString::to_string).unwrap_or_default(),
+            )
+        }).collect::<IndexMap<_, _>>())
+    }
+);
+
+serde_conv!(
+    MappingWithEqualsNoNull,
+    IndexMap<String, String>,
+    |variables: &IndexMap<String, String>| {
+        variables
+            .iter()
+            .map(|(key, value)| format!("{key}={value}"))
+            .collect::<Vec<_>>()
+    },
+    |variables: Vec<String>| -> Result<_> {
+        let variables = variables.into_iter().map(|variable| -> Result<_> {
+            let mut parts = variable.split('=');
+            let key = parts.next().unwrap().to_string();
+            let value = parts.next().map(ToString::to_string).ok_or_else(|| anyhow!("{key}: value not defined"))?;
+
+            Ok((key, value))
+        }).collect::<Result<Vec<_>, _>>()?;
+
+        Ok(variables.into_iter().collect::<IndexMap<_, _>>())
+    }
+);
+
+serde_conv!(
+    MappingWithEqualsNull,
+    IndexMap<String, Option<String>>,
+    |variables: &IndexMap<String, Option<String>>| {
+        variables
+            .iter()
+            .map(|(key, value)| match value {
+                Some(value) => format!("{key}={value}"),
+                None => key.clone(),
+            })
+            .collect::<Vec<_>>()
+    },
+    |variables: Vec<String>| -> std::result::Result<_, Infallible> {
+        Ok(variables.into_iter().map(|variable| {
+            let mut parts = variable.split('=');
+            (
+                parts.next().unwrap().to_string(),
+                parts.next().map(ToString::to_string),
+            )
+        }).collect::<IndexMap<_, _>>())
+    }
+);
+
+serde_conv!(
+    NetworksVec,
+    IndexMap<String, Option<ServiceNetwork>>,
+    |networks: &IndexMap<String, Option<ServiceNetwork>>| networks.keys().cloned().collect::<Vec<_>>(),
+    |networks: Vec<String>| -> std::result::Result<_, Infallible> {
+        Ok(networks.into_iter().map(|network| (network, None)).collect::<IndexMap<_, _>>())
+    }
+);
+
+serde_conv!(
+    PortOrString,
+    Port,
+    |port: &Port| {
+        let mut string = port.target.clone();
+
+        match (&port.published, &port.host_ip) {
+            (None, None) => {}
+            (published, host_ip) => {
+                string = format!("{}:{string}", published.clone().unwrap_or_default());
+
+                if let Some(host_ip) = host_ip {
+                    string = format!("{host_ip}:{string}");
+                }
+            }
+        }
+
+        if port.protocol == "udp" {
+            string = format!("{string}/{}", port.protocol);
+        }
+
+        string
+    },
+    |port: String| -> std::result::Result<_, Infallible> {
+        let mut parts = port.split(':').rev();
+        let container_port = parts.next().unwrap();
+        let mut container_parts = container_port.split('/');
+        let target = container_parts.next().unwrap().to_string();
+
+        Ok(Port {
+            target,
+            published: parts.next().and_then(|part| {
+                if part.is_empty() {
+                    None
+                } else {
+                    Some(part.to_string())
+                }
+            }),
+            host_ip: parts.next().map(ToString::to_string),
+            protocol: container_parts
+                .next()
+                .map(ToString::to_string)
+                .unwrap_or_else(|| String::from("tcp")),
+        })
+    }
+);
+
+serde_conv!(
+    PortOrU32,
+    Port,
+    |port: &Port| port.target.parse::<u32>().unwrap(),
+    |target: u32| -> std::result::Result<_, Infallible> {
+        Ok(Port {
+            target: target.to_string(),
+            protocol: String::from("tcp"),
+            ..Default::default()
+        })
+    }
+);
 
 serde_conv!(
     ServiceVolumeOrString,
@@ -761,7 +913,7 @@ serde_conv!(
         Ok(ServiceVolume {
             r#type,
             source,
-            target,
+            target: PathBuf::from(target),
             read_only,
             bind,
             volume,
@@ -770,64 +922,21 @@ serde_conv!(
     }
 );
 
-#[skip_serializing_none]
-#[serde_as]
-#[derive(Serialize, Deserialize, Debug)]
-pub(crate) struct Network {
-    pub(crate) driver: Option<String>,
-    pub(crate) driver_opts: Option<IndexMap<String, String>>,
-    pub(crate) enable_ipv6: Option<bool>,
-    pub(crate) ipam: Option<IpamConfig>,
-    pub(crate) internal: Option<bool>,
-    #[serde_as(as = "Option<PickFirst<(_, MappingWithEqualsEmpty)>>")]
-    pub(crate) labels: Option<IndexMap<String, String>>,
-    pub(crate) external: Option<bool>,
-    pub(crate) name: Option<String>,
-}
+serde_conv!(
+    StringOrU16,
+    String,
+    |string: &String| string.parse::<u16>().unwrap(),
+    |uint: u16| -> std::result::Result<_, Infallible> { Ok(uint.to_string()) }
+);
 
-#[skip_serializing_none]
-#[derive(Serialize, Deserialize, Debug)]
-pub(crate) struct IpamConfig {
-    pub(crate) driver: Option<String>,
-    pub(crate) config: Option<Vec<IpamPool>>,
-}
-
-#[skip_serializing_none]
-#[derive(Serialize, Deserialize, Debug)]
-pub(crate) struct IpamPool {
-    pub(crate) subnet: Option<String>,
-    pub(crate) ip_range: Option<String>,
-    pub(crate) gateway: Option<String>,
-}
-
-#[skip_serializing_none]
-#[serde_as]
-#[derive(Serialize, Deserialize, Debug)]
-pub(crate) struct Volume {
-    pub(crate) driver: Option<String>,
-    pub(crate) driver_opts: Option<IndexMap<String, String>>,
-    pub(crate) external: Option<bool>,
-    #[serde_as(as = "Option<PickFirst<(_, MappingWithEqualsEmpty)>>")]
-    pub(crate) labels: Option<IndexMap<String, String>>,
-    pub(crate) name: Option<String>,
-}
-
-#[skip_serializing_none]
-#[derive(Serialize, Deserialize, Debug)]
-pub(crate) struct Config {
-    pub(crate) file: Option<String>,
-    pub(crate) external: Option<bool>,
-    pub(crate) name: Option<String>,
-}
-
-#[skip_serializing_none]
-#[derive(Serialize, Deserialize, Debug)]
-pub(crate) struct Secret {
-    pub(crate) file: Option<String>,
-    pub(crate) environment: Option<String>,
-    pub(crate) external: Option<bool>,
-    pub(crate) name: Option<String>,
-}
+serde_conv!(
+    StringOrUsizeMap,
+    IndexMap<String, String>,
+    |map: &IndexMap<String, String>| map.into_iter().map(|(key, value)| (key.clone(), value.parse::<usize>().unwrap())).collect::<IndexMap<_, _>>(),
+    |map: IndexMap<String, usize>| -> std::result::Result<_, Infallible> {
+        Ok(map.into_iter().map(|(key, value)| (key, value.to_string())).collect())
+    }
+);
 
 #[cfg(test)]
 mod tests {

@@ -10,7 +10,7 @@ use serde_with::{
     formats::CommaSeparator, serde_as, skip_serializing_none, BoolFromInt, PickFirst,
     StringWithSeparator,
 };
-use std::path::PathBuf;
+use std::{env, path::PathBuf};
 
 use commands::Command;
 use utils::PathSeparator;
@@ -68,6 +68,7 @@ fn main() -> Result<()> {
     let args = Args::parse();
     let config = config::load(args.flags)?;
 
+    env::set_current_dir(&config.project_directory)?;
     commands::run(args.command, config)?;
 
     Ok(())

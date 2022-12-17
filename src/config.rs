@@ -49,6 +49,7 @@ fn find(directory: &Path, files: &Vec<String>) -> Result<PathBuf> {
 }
 
 fn resolve(flags: &Flags) -> Result<Config> {
+    let current_dir = env::current_dir()?;
     let flags = Figment::new()
         .merge(Env::prefixed("COMPOSE_").ignore(&["env_file", "project_directory"]))
         .merge(Serialized::defaults(flags))
@@ -61,16 +62,14 @@ fn resolve(flags: &Flags) -> Result<Config> {
                 if file.as_os_str() == "-" {
                     Ok(file)
                 } else {
-                    file.absolutize().map(|file| file.to_path_buf())
+                    file.absolutize_from(&current_dir)
+                        .map(|file| file.to_path_buf())
                 }
             })
             .collect::<Result<Vec<_>, _>>()?
     } else {
         let file = find(
-            flags
-                .project_directory
-                .as_ref()
-                .unwrap_or(&env::current_dir()?),
+            flags.project_directory.as_ref().unwrap_or(&current_dir),
             &COMPOSE_FILE_NAMES,
         )?;
 
@@ -85,17 +84,20 @@ fn resolve(flags: &Flags) -> Result<Config> {
             vec![&file]
         }
         .into_iter()
-        .map(|file| file.absolutize().map(|file| file.to_path_buf()))
+        .map(|file| {
+            file.absolutize_from(&current_dir)
+                .map(|file| file.to_path_buf())
+        })
         .collect::<Result<Vec<_>, _>>()?
     };
 
     let project_directory = if let Some(dir) = flags.project_directory {
-        dir.absolutize()?.to_path_buf()
+        dir.absolutize_from(&current_dir)?.to_path_buf()
     } else {
         files[0]
             .parent()
             .unwrap_or_else(|| Path::new("/"))
-            .absolutize()?
+            .absolutize_from(&current_dir)?
             .to_path_buf()
     };
 

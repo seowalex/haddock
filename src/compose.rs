@@ -5,6 +5,7 @@ use anyhow::{anyhow, bail, Context, Error, Result};
 use clap::crate_name;
 use indexmap::IndexSet;
 use itertools::Itertools;
+use path_absolutize::Absolutize;
 use serde_yaml::Value;
 use std::{
     env, fs,
@@ -220,6 +221,15 @@ pub(crate) fn parse(config: Config) -> Result<Compose> {
         combined_file.merge(file);
     }
 
+    for service in combined_file.services.values_mut() {
+        if let Some(build) = &mut service.build {
+            build.dockerfile = build
+                .dockerfile
+                .absolutize_from(&build.context)?
+                .to_path_buf();
+        }
+    }
+
     for (name, service) in &combined_file.services {
         if service.build.is_none() && service.image.is_none() {
             bail!("Service \"{name}\" has neither an image nor a build context specified");
@@ -228,6 +238,14 @@ pub(crate) fn parse(config: Config) -> Result<Compose> {
         if service.network_mode.as_deref().unwrap_or_default() == "host" && service.ports.is_some()
         {
             bail!("Service \"{name}\" cannot have port mappings due to host network mode");
+        }
+
+        if let Some(dependencies) = &service.depends_on {
+            for dependency in dependencies.keys() {
+                if !combined_file.services.contains_key(dependency) {
+                    bail!("Service \"{name}\" depends on undefined service \"{dependency}\"");
+                }
+            }
         }
     }
 
