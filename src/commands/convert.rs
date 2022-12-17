@@ -1,6 +1,7 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Context, Error, Result};
 use clap::ValueEnum;
 use indexmap::IndexSet;
+use path_absolutize::Absolutize;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -38,7 +39,7 @@ pub(crate) struct Args {
 
     /// Save to file (default to stdout)
     #[arg(short, long)]
-    output: Option<String>,
+    output: Option<PathBuf>,
 }
 
 #[derive(ValueEnum, Clone, Debug)]
@@ -85,14 +86,12 @@ pub(crate) fn run(args: Args, config: Config) -> Result<()> {
                     let contents = serde_yaml::to_string(&file)?;
 
                     if let Some(path) = args.output {
-                        fs::write(&path, contents).with_context(|| {
-                            anyhow!(
+                        fs::write(&path, contents).with_context(|| match path.absolutize() {
+                            Ok(path) => anyhow!(
                                 "{} not found",
-                                PathBuf::from(path)
-                                    .parent()
-                                    .unwrap_or_else(|| Path::new("/"))
-                                    .display()
-                            )
+                                path.parent().unwrap_or_else(|| Path::new("/")).display()
+                            ),
+                            Err(err) => Error::from(err),
                         })?;
                     } else {
                         print!("{contents}");
@@ -103,14 +102,12 @@ pub(crate) fn run(args: Args, config: Config) -> Result<()> {
                     contents.push('\n');
 
                     if let Some(path) = args.output {
-                        fs::write(&path, contents).with_context(|| {
-                            anyhow!(
+                        fs::write(&path, contents).with_context(|| match path.absolutize() {
+                            Ok(path) => anyhow!(
                                 "{} not found",
-                                PathBuf::from(path)
-                                    .parent()
-                                    .unwrap_or_else(|| Path::new("/"))
-                                    .display()
-                            )
+                                path.parent().unwrap_or_else(|| Path::new("/")).display()
+                            ),
+                            Err(err) => Error::from(err),
                         })?;
                     } else {
                         print!("{contents}");

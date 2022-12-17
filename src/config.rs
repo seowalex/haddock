@@ -22,9 +22,9 @@ static COMPOSE_FILE_NAMES: Lazy<Vec<String>> = Lazy::new(|| {
 #[derive(Debug)]
 pub(crate) struct Config {
     pub(crate) project_name: Option<String>,
-    pub(crate) files: Vec<String>,
+    pub(crate) files: Vec<PathBuf>,
     pub(crate) profiles: Vec<String>,
-    pub(crate) project_directory: String,
+    pub(crate) project_directory: PathBuf,
     pub(crate) convert_windows_paths: bool,
     pub(crate) ignore_orphans: bool,
 }
@@ -56,24 +56,21 @@ fn resolve(flags: &Flags) -> Result<Config> {
 
     let files = if let Some(files) = flags.file {
         files
-            .iter()
+            .into_iter()
             .map(|file| {
-                if file == "-" {
-                    Ok(file.clone())
+                if file.as_os_str() == "-" {
+                    Ok(file)
                 } else {
-                    Path::new(file)
-                        .absolutize()
-                        .with_context(|| anyhow!("{file} not found"))
-                        .map(|file| file.to_string_lossy().to_string())
+                    file.absolutize().map(|file| file.to_path_buf())
                 }
             })
             .collect::<Result<Vec<_>, _>>()?
     } else {
         let file = find(
-            &flags
+            flags
                 .project_directory
                 .as_ref()
-                .map_or(env::current_dir()?, PathBuf::from),
+                .unwrap_or(&env::current_dir()?),
             &COMPOSE_FILE_NAMES,
         )?;
 
@@ -88,30 +85,18 @@ fn resolve(flags: &Flags) -> Result<Config> {
             vec![&file]
         }
         .into_iter()
-        .map(|file| {
-            file.absolutize()
-                .with_context(|| anyhow!("{} not found", file.display()))
-                .map(|file| file.to_string_lossy().to_string())
-        })
+        .map(|file| file.absolutize().map(|file| file.to_path_buf()))
         .collect::<Result<Vec<_>, _>>()?
     };
 
     let project_directory = if let Some(dir) = flags.project_directory {
-        Path::new(&dir)
-            .absolutize()
-            .with_context(|| anyhow!("{dir} not found"))?
-            .to_string_lossy()
-            .to_string()
+        dir.absolutize()?.to_path_buf()
     } else {
-        let parent = Path::new(&files[0])
+        files[0]
             .parent()
-            .unwrap_or_else(|| Path::new("/"));
-
-        parent
-            .absolutize()
-            .with_context(|| anyhow!("{} not found", parent.display()))?
-            .to_string_lossy()
-            .to_string()
+            .unwrap_or_else(|| Path::new("/"))
+            .absolutize()?
+            .to_path_buf()
     };
 
     Ok(Config {
@@ -126,10 +111,10 @@ fn resolve(flags: &Flags) -> Result<Config> {
 
 pub(crate) fn load(flags: Flags) -> Result<Config> {
     let config = resolve(&flags)?;
-    let env_file = flags.env_file.as_ref().map_or_else(
-        || PathBuf::from(config.project_directory).join(".env"),
-        PathBuf::from,
-    );
+    let env_file = flags
+        .env_file
+        .clone()
+        .unwrap_or_else(|| config.project_directory.join(".env"));
 
     dotenvy::from_path(&env_file)
         .with_context(|| anyhow!("{} not found", env_file.display()))

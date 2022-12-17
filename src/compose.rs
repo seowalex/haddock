@@ -102,7 +102,7 @@ pub(crate) fn parse(config: Config) -> Result<Compose> {
         .files
         .into_iter()
         .map(|path| {
-            if path == "-" {
+            if path.as_os_str() == "-" {
                 let mut content = String::new();
                 let mut stdin = io::stdin();
 
@@ -111,7 +111,7 @@ pub(crate) fn parse(config: Config) -> Result<Compose> {
                 Ok((path, content))
             } else {
                 fs::read_to_string(&path)
-                    .with_context(|| format!("{path} not found"))
+                    .with_context(|| format!("{} not found", path.display()))
                     .map(|content| (path, content))
             }
         })
@@ -195,7 +195,12 @@ pub(crate) fn parse(config: Config) -> Result<Compose> {
                 serde_ignored::deserialize(serde_yaml::Deserializer::from_str(&content), |path| {
                     unused.insert(path.to_string());
                 })
-                .with_context(|| format!("{path} does not follow the Compose specification"))
+                .with_context(|| {
+                    format!(
+                        "{} does not follow the Compose specification",
+                        path.display()
+                    )
+                })
                 .map(|file: Compose| (path, file, unused))
             })
         })
@@ -205,8 +210,9 @@ pub(crate) fn parse(config: Config) -> Result<Compose> {
     for (path, file, unused) in files {
         if !unused.is_empty() {
             eprintln!(
-                "{} Unsupported/unknown properties in {path}: {}",
+                "{} Unsupported/unknown properties in {}: {}",
                 Paint::yellow("Warning:").bold(),
+                path.display(),
                 unused.into_iter().join(", ")
             );
         }

@@ -10,6 +10,7 @@ use serde_with::{
     formats::CommaSeparator, serde_as, skip_serializing_none, BoolFromInt, PickFirst,
     StringWithSeparator,
 };
+use std::path::PathBuf;
 
 use commands::Command;
 use utils::PathSeparator;
@@ -34,8 +35,8 @@ pub(crate) struct Flags {
 
     /// Compose configuration files
     #[arg(short, long)]
-    #[serde_as(as = "Option<PickFirst<(_, StringWithSeparator::<PathSeparator, String>)>>")]
-    pub(crate) file: Option<Vec<String>>,
+    #[serde_as(as = "Option<PickFirst<(_, StringWithSeparator::<PathSeparator, PathBuf>)>>")]
+    pub(crate) file: Option<Vec<PathBuf>>,
 
     /// Specify a profile to enable
     #[arg(long)]
@@ -45,11 +46,11 @@ pub(crate) struct Flags {
 
     /// Specify an alternate environment file
     #[arg(long)]
-    pub(crate) env_file: Option<String>,
+    pub(crate) env_file: Option<PathBuf>,
 
     /// Specify an alternate working directory
     #[arg(long)]
-    pub(crate) project_directory: Option<String>,
+    pub(crate) project_directory: Option<PathBuf>,
 
     #[arg(skip)]
     #[serde_as(as = "Option<PickFirst<(_, BoolFromInt)>>")]
