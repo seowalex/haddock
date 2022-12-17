@@ -58,10 +58,14 @@ fn resolve(flags: &Flags) -> Result<Config> {
         files
             .iter()
             .map(|file| {
-                Path::new(file)
-                    .absolutize()
-                    .with_context(|| anyhow!("{file} not found"))
-                    .map(|file| file.to_string_lossy().to_string())
+                if file == "-" {
+                    Ok(file.clone())
+                } else {
+                    Path::new(file)
+                        .absolutize()
+                        .with_context(|| anyhow!("{file} not found"))
+                        .map(|file| file.to_string_lossy().to_string())
+                }
             })
             .collect::<Result<Vec<_>, _>>()?
     } else {

@@ -6,7 +6,10 @@ use clap::crate_name;
 use indexmap::IndexSet;
 use itertools::Itertools;
 use serde_yaml::Value;
-use std::{env, fs};
+use std::{
+    env, fs,
+    io::{self, Read},
+};
 use yansi::Paint;
 
 use crate::{config::Config, utils::regex};
@@ -99,9 +102,18 @@ pub(crate) fn parse(config: Config) -> Result<Compose> {
         .files
         .into_iter()
         .map(|path| {
-            fs::read_to_string(&path)
-                .with_context(|| format!("{path} not found"))
-                .map(|content| (path, content))
+            if path == "-" {
+                let mut content = String::new();
+                let mut stdin = io::stdin();
+
+                stdin.read_to_string(&mut content)?;
+
+                Ok((path, content))
+            } else {
+                fs::read_to_string(&path)
+                    .with_context(|| format!("{path} not found"))
+                    .map(|content| (path, content))
+            }
         })
         .collect::<Result<Vec<_>, _>>()?;
     let files = contents
