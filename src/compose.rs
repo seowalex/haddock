@@ -237,12 +237,61 @@ pub(crate) fn parse(config: Config) -> Result<Compose> {
         })
     });
 
+    let mut all_configs = IndexSet::new();
+    let mut all_secrets = IndexSet::new();
+
     for service in combined_file.services.values_mut() {
         if let Some(build) = &mut service.build {
             build.dockerfile = build
                 .dockerfile
                 .absolutize_from(&build.context)?
                 .to_path_buf();
+        }
+
+        if let Some(configs) = &service.configs {
+            all_configs.extend(configs.into_iter().map(|config| &config.source));
+        }
+
+        if let Some(secrets) = &service.secrets {
+            all_secrets.extend(secrets.into_iter().map(|secret| &secret.source));
+        }
+    }
+
+    if let Some(configs) = &mut combined_file.configs {
+        configs.retain(|config, _| all_configs.contains(config));
+
+        for (name, config) in configs {
+            config.name.get_or_insert_with(|| {
+                let current_dir = env::current_dir().ok().and_then(|name| {
+                    name.file_name()
+                        .map(|name| name.to_string_lossy().to_string())
+                });
+
+                if config.external.unwrap_or(false) || current_dir.is_none() {
+                    name.clone()
+                } else {
+                    format!("{}_{name}", current_dir.unwrap())
+                }
+            });
+        }
+    }
+
+    if let Some(secrets) = &mut combined_file.secrets {
+        secrets.retain(|secrets, _| all_secrets.contains(secrets));
+
+        for (name, secret) in secrets {
+            secret.name.get_or_insert_with(|| {
+                let current_dir = env::current_dir().ok().and_then(|name| {
+                    name.file_name()
+                        .map(|name| name.to_string_lossy().to_string())
+                });
+
+                if secret.external.unwrap_or(false) || current_dir.is_none() {
+                    name.clone()
+                } else {
+                    format!("{}_{name}", current_dir.unwrap())
+                }
+            });
         }
     }
 
@@ -254,6 +303,40 @@ pub(crate) fn parse(config: Config) -> Result<Compose> {
         if service.network_mode.as_deref().unwrap_or_default() == "host" && service.ports.is_some()
         {
             bail!("Service \"{name}\" cannot have port mappings due to host network mode");
+        }
+
+        if let Some(configs) = &service.configs {
+            for config in configs {
+                if !combined_file
+                    .configs
+                    .as_ref()
+                    .map(|configs| configs.keys().collect::<IndexSet<_>>())
+                    .unwrap_or_default()
+                    .contains(&config.source)
+                {
+                    bail!(
+                        "Service \"{name}\" refers to undefined config \"{}\"",
+                        config.source
+                    );
+                }
+            }
+        }
+
+        if let Some(secrets) = &service.secrets {
+            for secret in secrets {
+                if !combined_file
+                    .secrets
+                    .as_ref()
+                    .map(|secrets| secrets.keys().collect::<IndexSet<_>>())
+                    .unwrap_or_default()
+                    .contains(&secret.source)
+                {
+                    bail!(
+                        "Service \"{name}\" refers to undefined secret \"{}\"",
+                        secret.source
+                    );
+                }
+            }
         }
 
         if let Some(dependencies) = &service.depends_on {
