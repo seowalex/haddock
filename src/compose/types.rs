@@ -1,5 +1,6 @@
 use anyhow::{anyhow, bail, Error, Result};
 use byte_unit::Byte;
+use either::Either;
 use humantime::{format_duration, parse_duration};
 use indexmap::{IndexMap, IndexSet};
 use path_absolutize::Absolutize;
@@ -18,7 +19,7 @@ use std::{
 };
 use yansi::Paint;
 
-use crate::utils::{DisplayFromAny, DuplicateInsertsLastWinsSet, Merge};
+use crate::utils::{DisplayFromAny, DuplicateInsertsLastWinsSet, EitherPathBufOrString, Merge};
 
 #[skip_serializing_none]
 #[derive(Serialize, Deserialize, Default, Debug)]
@@ -456,8 +457,8 @@ pub(crate) enum ResourceLimit {
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct ServiceVolume {
     pub(crate) r#type: ServiceVolumeType,
-    #[serde_as(as = "Option<DisplayFromAny>")]
-    pub(crate) source: Option<String>,
+    #[serde_as(as = "Option<EitherPathBufOrString>")]
+    pub(crate) source: Option<Either<PathBuf, String>>,
     #[serde_as(as = "DisplayFromAny")]
     pub(crate) target: PathBuf,
     pub(crate) read_only: Option<bool>,
@@ -895,9 +896,11 @@ serde_conv!(
             [src, dst] if dst.starts_with('/') => {
                 if src.starts_with('/') || src.starts_with('.') {
                     r#type = ServiceVolumeType::Bind;
+                    source = Some(Either::Left(Path::new(src).absolutize()?.to_path_buf()));
+                } else {
+                    source = Some(Either::Right(src.to_string()));
                 }
 
-                source = Some(src.to_string());
                 target = dst.to_string();
             }
             [dst, opts] => {
@@ -907,9 +910,11 @@ serde_conv!(
             [src, dst, opts] => {
                 if src.starts_with('/') || src.starts_with('.') {
                     r#type = ServiceVolumeType::Bind;
+                    source = Some(Either::Left(Path::new(src).absolutize()?.to_path_buf()));
+                } else {
+                    source = Some(Either::Right(src.to_string()));
                 }
 
-                source = Some(src.to_string());
                 target = dst.to_string();
                 options = opts;
             }

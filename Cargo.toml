@@ -9,10 +9,11 @@ keywords = ["podman", "compose", "docker", "docker-compose"]
 categories = ["command-line-utilities"]
 
 [dependencies]
-anyhow = "1.0.66"
+anyhow = "1.0.67"
 byte-unit = { version = "4.0.18", default-features = false, features = ["serde", "std"] }
 clap = { version = "4.0.29", features = ["cargo", "derive"] }
 dotenvy = "0.15.6"
+either = "1.8.0"
 figment = { version = "0.10.8", features = ["env"] }
 humantime = "2.1.0"
 indexmap = { version = "1.9.2", features = ["serde"] }
@@ -23,10 +24,10 @@ path-absolutize = { version = "3.0.14", features = ["once_cell_cache"] }
 parse-hyperlinks = "0.23.4"
 regex = "1.7.0"
 serde = { version = "1.0.151", features = ["derive"] }
-serde_ignored = "0.1.5"
-serde_json = "1.0.89"
+serde_ignored = "0.1.6"
+serde_json = "1.0.90"
 serde_with = { version = "2.1.0", features = ["indexmap"] }
-serde_yaml = "0.9.14"
+serde_yaml = "0.9.15"
 yansi = "0.5.1"
 
 [dev-dependencies]

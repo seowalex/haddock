@@ -1,0 +1,16 @@
+services:
+  foo:
+    image: foo
+    volumes:
+      - foo:/bar
+      - ./foo:/baz
+  bar:
+    image: bar
+    volumes:
+      - type: volume
+        source: bar
+        target: /foo
+      - type: bind
+        source: ./bar
+        target: /baz
+
