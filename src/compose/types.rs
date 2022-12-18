@@ -18,7 +18,7 @@ use std::{
 };
 use yansi::Paint;
 
-use crate::utils::{DuplicateInsertsLastWinsSet, Merge};
+use crate::utils::{DisplayFromAny, DuplicateInsertsLastWinsSet, Merge};
 
 #[skip_serializing_none]
 #[derive(Serialize, Deserialize, Default, Debug)]
@@ -61,7 +61,7 @@ impl Compose {
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct Service {
     pub(crate) blkio_config: Option<BlkioConfig>,
-    #[serde_as(as = "Option<PickFirst<(_, BuildConfigOrString)>>")]
+    #[serde_as(as = "Option<PickFirst<(_, BuildConfigOrPathBuf)>>")]
     pub(crate) build: Option<BuildConfig>,
     pub(crate) cap_add: Option<Vec<String>>,
     pub(crate) cap_drop: Option<Vec<String>>,
@@ -97,11 +97,15 @@ pub(crate) struct Service {
     pub(crate) entrypoint: Option<Vec<String>>,
     #[serde_as(as = "Option<OneOrMany<AbsPathBuf, PreferMany>>")]
     pub(crate) env_file: Option<Vec<PathBuf>>,
-    #[serde_as(as = "Option<PickFirst<(_, MappingWithEqualsNull)>>")]
+    #[serde_as(
+        as = "Option<PickFirst<(_, IndexMap<DisplayFromAny, Option<DisplayFromAny>>, MappingWithEqualsNull)>>"
+    )]
     pub(crate) environment: Option<IndexMap<String, Option<String>>>,
     pub(crate) expose: Option<Vec<String>>,
     pub(crate) external_links: Option<Vec<String>>,
-    #[serde_as(as = "Option<PickFirst<(_, MappingWithColonEmpty)>>")]
+    #[serde_as(
+        as = "Option<PickFirst<(_, IndexMap<DisplayFromAny, DisplayFromAny>, MappingWithColonEmpty)>>"
+    )]
     pub(crate) extra_hosts: Option<IndexMap<String, String>>,
     pub(crate) group_add: Option<Vec<String>>,
     pub(crate) healthcheck: Option<Healthcheck>,
@@ -109,7 +113,9 @@ pub(crate) struct Service {
     pub(crate) image: Option<String>,
     pub(crate) init: Option<bool>,
     pub(crate) ipc: Option<String>,
-    #[serde_as(as = "Option<PickFirst<(_, MappingWithEqualsEmpty)>>")]
+    #[serde_as(
+        as = "Option<PickFirst<(_, IndexMap<DisplayFromAny, DisplayFromAny>, MappingWithEqualsEmpty)>>"
+    )]
     pub(crate) labels: Option<IndexMap<String, String>>,
     pub(crate) links: Option<Vec<String>>,
     pub(crate) logging: Option<Logging>,
@@ -126,7 +132,7 @@ pub(crate) struct Service {
     pub(crate) pid: Option<String>,
     pub(crate) pids_limit: Option<i64>,
     pub(crate) platform: Option<String>,
-    #[serde_as(as = "Option<Vec<PickFirst<(_, PortOrString, PortOrU32)>>>")]
+    #[serde_as(as = "Option<Vec<PickFirst<(_, PortOrString, PortOrU16)>>>")]
     pub(crate) ports: Option<Vec<Port>>,
     pub(crate) privileged: Option<bool>,
     pub(crate) profiles: Option<Vec<String>>,
@@ -142,7 +148,9 @@ pub(crate) struct Service {
     pub(crate) stop_grace_period: Option<Duration>,
     pub(crate) stop_signal: Option<String>,
     pub(crate) storage_opt: Option<IndexMap<String, String>>,
-    #[serde_as(as = "Option<PickFirst<(_, StringOrUsizeMap, MappingWithEqualsNoNull)>>")]
+    #[serde_as(
+        as = "Option<PickFirst<(_, IndexMap<DisplayFromAny, DisplayFromAny>, MappingWithEqualsNoNull)>>"
+    )]
     pub(crate) sysctls: Option<IndexMap<String, String>>,
     #[serde_as(as = "Option<OneOrMany<_, PreferMany>>")]
     pub(crate) tmpfs: Option<Vec<PathBuf>>,
@@ -217,28 +225,43 @@ pub(crate) struct ThrottleDevice {
 #[serde_as]
 #[derive(Serialize, Deserialize, Default, Debug)]
 pub(crate) struct BuildConfig {
-    #[serde_as(as = "AbsPathBuf")]
+    #[serde_as(as = "PickFirst<(AbsPathBuf, DisplayFromAny)>")]
     pub(crate) context: PathBuf,
+    #[serde_as(as = "DisplayFromAny")]
     #[serde(default = "default_dockerfile")]
     pub(crate) dockerfile: PathBuf,
-    #[serde_as(as = "Option<PickFirst<(_, MappingWithEqualsNull)>>")]
+    #[serde_as(
+        as = "Option<PickFirst<(_, IndexMap<DisplayFromAny, Option<DisplayFromAny>>, MappingWithEqualsNull)>>"
+    )]
     pub(crate) args: Option<IndexMap<String, Option<String>>>,
-    #[serde_as(as = "Option<PickFirst<(MappingWithEqualsNullSerialiseAsColon, _)>>")]
+    #[serde_as(
+        as = "Option<PickFirst<(MappingWithEqualsNullSerialiseAsColon, _, IndexMap<DisplayFromAny, Option<DisplayFromAny>>)>>"
+    )]
     pub(crate) ssh: Option<IndexMap<String, Option<String>>>,
+    #[serde_as(as = "Option<Vec<DisplayFromAny>>")]
     pub(crate) cache_from: Option<Vec<String>>,
+    #[serde_as(as = "Option<Vec<DisplayFromAny>>")]
     pub(crate) cache_to: Option<Vec<String>>,
-    #[serde_as(as = "Option<PickFirst<(_, MappingWithColonEmpty)>>")]
+    #[serde_as(
+        as = "Option<PickFirst<(_, IndexMap<DisplayFromAny, DisplayFromAny>, MappingWithColonEmpty)>>"
+    )]
     pub(crate) extra_hosts: Option<IndexMap<String, String>>,
+    #[serde_as(as = "Option<DisplayFromAny>")]
     pub(crate) isolation: Option<String>,
-    #[serde_as(as = "Option<PickFirst<(_, MappingWithEqualsEmpty)>>")]
+    #[serde_as(
+        as = "Option<PickFirst<(_, IndexMap<DisplayFromAny, DisplayFromAny>, MappingWithEqualsEmpty)>>"
+    )]
     pub(crate) labels: Option<IndexMap<String, String>>,
     pub(crate) no_cache: Option<bool>,
     pub(crate) pull: Option<bool>,
     pub(crate) shm_size: Option<Byte>,
+    #[serde_as(as = "Option<DisplayFromAny>")]
     pub(crate) target: Option<String>,
     #[serde_as(as = "Option<DuplicateInsertsLastWinsSet<PickFirst<(_, FileReferenceOrString)>>>")]
     pub(crate) secrets: Option<IndexSet<FileReference>>,
+    #[serde_as(as = "Option<Vec<DisplayFromAny>>")]
     pub(crate) tags: Option<Vec<String>>,
+    #[serde_as(as = "Option<Vec<DisplayFromAny>>")]
     pub(crate) platforms: Option<Vec<String>>,
 }
 
@@ -250,9 +273,13 @@ fn default_dockerfile() -> PathBuf {
 #[serde_as]
 #[derive(Serialize, Deserialize, Default, Debug)]
 pub(crate) struct FileReference {
+    #[serde_as(as = "DisplayFromAny")]
     pub(crate) source: String,
-    pub(crate) target: Option<PathBuf>,
+    #[serde_as(as = "Option<DisplayFromAny>")]
+    pub(crate) target: Option<String>,
+    #[serde_as(as = "Option<DisplayFromAny>")]
     pub(crate) uid: Option<String>,
+    #[serde_as(as = "Option<DisplayFromAny>")]
     pub(crate) gid: Option<String>,
     #[serde_as(as = "Option<PickFirst<(_, DisplayFromStr)>>")]
     pub(crate) mode: Option<u32>,
@@ -365,11 +392,16 @@ pub(crate) enum SwapLimit {
 }
 
 #[skip_serializing_none]
+#[serde_as]
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct ServiceNetwork {
+    #[serde_as(as = "Option<Vec<DisplayFromAny>>")]
     pub(crate) aliases: Option<Vec<String>>,
+    #[serde_as(as = "Option<DisplayFromAny>")]
     pub(crate) ipv4_address: Option<String>,
+    #[serde_as(as = "Option<DisplayFromAny>")]
     pub(crate) ipv6_address: Option<String>,
+    #[serde_as(as = "Option<Vec<DisplayFromAny>>")]
     pub(crate) link_local_ips: Option<Vec<String>>,
     pub(crate) priority: Option<i32>,
 }
@@ -378,11 +410,13 @@ pub(crate) struct ServiceNetwork {
 #[serde_as]
 #[derive(Serialize, Deserialize, Default, Debug)]
 pub(crate) struct Port {
-    #[serde_as(as = "PickFirst<(_, StringOrU16)>")]
+    #[serde_as(as = "DisplayFromAny")]
     pub(crate) target: String,
-    #[serde_as(as = "Option<PickFirst<(_, StringOrU16)>>")]
+    #[serde_as(as = "Option<DisplayFromAny>")]
     pub(crate) published: Option<String>,
+    #[serde_as(as = "Option<DisplayFromAny>")]
     pub(crate) host_ip: Option<String>,
+    #[serde_as(as = "DisplayFromAny")]
     #[serde(default = "default_protocol")]
     pub(crate) protocol: String,
 }
@@ -418,10 +452,13 @@ pub(crate) enum ResourceLimit {
 }
 
 #[skip_serializing_none]
+#[serde_as]
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct ServiceVolume {
     pub(crate) r#type: ServiceVolumeType,
+    #[serde_as(as = "Option<DisplayFromAny>")]
     pub(crate) source: Option<String>,
+    #[serde_as(as = "DisplayFromAny")]
     pub(crate) target: PathBuf,
     pub(crate) read_only: Option<bool>,
     pub(crate) bind: Option<ServiceVolumeBind>,
@@ -452,10 +489,13 @@ pub(crate) enum ServiceVolumeType {
 }
 
 #[skip_serializing_none]
+#[serde_as]
 #[derive(Serialize, Deserialize, Default, Debug)]
 pub(crate) struct ServiceVolumeBind {
+    #[serde_as(as = "Option<DisplayFromAny>")]
     pub(crate) propagation: Option<String>,
     pub(crate) create_host_path: Option<bool>,
+    #[serde_as(as = "Option<DisplayFromAny>")]
     pub(crate) selinux: Option<String>,
 }
 
@@ -489,7 +529,9 @@ pub(crate) struct Network {
     pub(crate) enable_ipv6: Option<bool>,
     pub(crate) ipam: Option<IpamConfig>,
     pub(crate) internal: Option<bool>,
-    #[serde_as(as = "Option<PickFirst<(_, MappingWithEqualsEmpty)>>")]
+    #[serde_as(
+        as = "Option<PickFirst<(_, IndexMap<DisplayFromAny, DisplayFromAny>, MappingWithEqualsEmpty)>>"
+    )]
     pub(crate) labels: Option<IndexMap<String, String>>,
     pub(crate) external: Option<bool>,
     pub(crate) name: Option<String>,
@@ -517,7 +559,9 @@ pub(crate) struct Volume {
     pub(crate) driver: Option<String>,
     pub(crate) driver_opts: Option<IndexMap<String, String>>,
     pub(crate) external: Option<bool>,
-    #[serde_as(as = "Option<PickFirst<(_, MappingWithEqualsEmpty)>>")]
+    #[serde_as(
+        as = "Option<PickFirst<(_, IndexMap<DisplayFromAny, DisplayFromAny>, MappingWithEqualsEmpty)>>"
+    )]
     pub(crate) labels: Option<IndexMap<String, String>>,
     pub(crate) name: Option<String>,
 }
@@ -556,7 +600,7 @@ serde_conv!(
 );
 
 serde_conv!(
-    BuildConfigOrString,
+    BuildConfigOrPathBuf,
     BuildConfig,
     |build: &BuildConfig| { build.context.clone() },
     |context: PathBuf| -> Result<_> {
@@ -818,10 +862,10 @@ serde_conv!(
 );
 
 serde_conv!(
-    PortOrU32,
+    PortOrU16,
     Port,
-    |port: &Port| port.target.parse::<u32>().unwrap(),
-    |target: u32| -> std::result::Result<_, Infallible> {
+    |port: &Port| port.target.parse::<u16>().unwrap(),
+    |target: u16| -> std::result::Result<_, Infallible> {
         Ok(Port {
             target: target.to_string(),
             protocol: String::from("tcp"),
@@ -919,22 +963,6 @@ serde_conv!(
             volume,
             tmpfs: None,
         })
-    }
-);
-
-serde_conv!(
-    StringOrU16,
-    String,
-    |string: &String| string.parse::<u16>().unwrap(),
-    |uint: u16| -> std::result::Result<_, Infallible> { Ok(uint.to_string()) }
-);
-
-serde_conv!(
-    StringOrUsizeMap,
-    IndexMap<String, String>,
-    |map: &IndexMap<String, String>| map.into_iter().map(|(key, value)| (key.clone(), value.parse::<usize>().unwrap())).collect::<IndexMap<_, _>>(),
-    |map: IndexMap<String, usize>| -> std::result::Result<_, Infallible> {
-        Ok(map.into_iter().map(|(key, value)| (key, value.to_string())).collect())
     }
 );
 

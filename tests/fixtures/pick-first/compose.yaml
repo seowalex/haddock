@@ -1,0 +1,75 @@
+services:
+  foo:
+    build:
+      context: 0
+      dockerfile: 0
+      args:
+        GIT_COMMIT: 0
+      ssh:
+        myproject: 0
+      cache_from:
+        - 0
+      cache_to:
+        - 0
+      extra_hosts:
+        somehost: 0
+      isolation: 0
+      labels:
+        com.example.label-with-empty-value: 0
+      secrets:
+        - source: 0
+          target: 0
+          uid: 0
+          gid: 0
+      target: 0
+      tags:
+        - 0
+      platforms:
+        - 0
+    configs:
+      - source: 0
+        target: 0
+        uid: 0
+        gid: 0
+    environment:
+      USER_INPUT: 0
+    extra_hosts:
+      somehost: 0
+    image: 0
+    labels:
+      com.example.label-with-empty-value: 0
+    networks:
+      admin:
+        aliases:
+          - 0
+        ipv4_address: 0
+        ipv6_address: 0
+        link_local_ips:
+          - 0
+    ports:
+      - target: 0
+        host_ip: 0
+        published: 0
+        protocol: 0
+    secrets:
+      - source: 0
+        target: 0
+        uid: 0
+        gid: 0
+    sysctls:
+      net.ipv4.tcp_syncookies: 0
+    volumes:
+      - type: volume
+        source: 0
+        target: 0
+        bind:
+          propagation: 0
+          selinux: 0
+networks:
+  foo:
+    labels:
+        com.example.label-with-empty-value: 0
+volumes:
+  foo:
+    labels:
+        com.example.label-with-empty-value: 0
