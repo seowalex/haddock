@@ -56,7 +56,7 @@ where
 
                 while let Some(value) = seq
                     .next_element()?
-                    .map(|v: DeserializeAsWrap<T, U>| v.into_inner())
+                    .map(DeserializeAsWrap::<T, U>::into_inner)
                 {
                     values.replace(value);
                 }

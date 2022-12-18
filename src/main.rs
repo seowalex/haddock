@@ -53,10 +53,6 @@ pub(crate) struct Flags {
     pub(crate) project_directory: Option<PathBuf>,
 
     #[arg(skip)]
-    #[serde_as(as = "Option<PickFirst<(_, BoolFromInt)>>")]
-    pub(crate) convert_windows_paths: Option<bool>,
-
-    #[arg(skip)]
     pub(crate) path_separator: Option<String>,
 
     #[arg(skip)]

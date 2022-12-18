@@ -3,7 +3,7 @@ mod types;
 
 use anyhow::{anyhow, bail, Context, Error, Result};
 use clap::crate_name;
-use indexmap::IndexSet;
+use indexmap::{IndexMap, IndexSet};
 use itertools::Itertools;
 use path_absolutize::Absolutize;
 use serde_yaml::Value;
@@ -267,13 +267,22 @@ pub(crate) fn parse(config: Config) -> Result<Compose> {
                         .map(|name| name.to_string_lossy().to_string())
                 });
 
-                if config.external.unwrap_or(false) || current_dir.is_none() {
+                if config.external.unwrap_or_default() || current_dir.is_none() {
                     name.clone()
                 } else {
                     format!("{}_{name}", current_dir.unwrap())
                 }
             });
         }
+    }
+
+    if combined_file
+        .configs
+        .as_ref()
+        .map(IndexMap::is_empty)
+        .unwrap_or_default()
+    {
+        combined_file.configs = None;
     }
 
     if let Some(secrets) = &mut combined_file.secrets {
@@ -286,13 +295,22 @@ pub(crate) fn parse(config: Config) -> Result<Compose> {
                         .map(|name| name.to_string_lossy().to_string())
                 });
 
-                if secret.external.unwrap_or(false) || current_dir.is_none() {
+                if secret.external.unwrap_or_default() || current_dir.is_none() {
                     name.clone()
                 } else {
                     format!("{}_{name}", current_dir.unwrap())
                 }
             });
         }
+    }
+
+    if combined_file
+        .secrets
+        .as_ref()
+        .map(IndexMap::is_empty)
+        .unwrap_or_default()
+    {
+        combined_file.secrets = None;
     }
 
     for (name, service) in &combined_file.services {
@@ -310,9 +328,8 @@ pub(crate) fn parse(config: Config) -> Result<Compose> {
                 if !combined_file
                     .configs
                     .as_ref()
-                    .map(|configs| configs.keys().collect::<IndexSet<_>>())
+                    .map(|configs| configs.contains_key(&config.source))
                     .unwrap_or_default()
-                    .contains(&config.source)
                 {
                     bail!(
                         "Service \"{name}\" refers to undefined config \"{}\"",
@@ -327,9 +344,8 @@ pub(crate) fn parse(config: Config) -> Result<Compose> {
                 if !combined_file
                     .secrets
                     .as_ref()
-                    .map(|secrets| secrets.keys().collect::<IndexSet<_>>())
+                    .map(|secrets| secrets.contains_key(&secret.source))
                     .unwrap_or_default()
-                    .contains(&secret.source)
                 {
                     bail!(
                         "Service \"{name}\" refers to undefined secret \"{}\"",

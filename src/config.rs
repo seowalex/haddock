@@ -25,11 +25,10 @@ pub(crate) struct Config {
     pub(crate) files: Vec<PathBuf>,
     pub(crate) profiles: Vec<String>,
     pub(crate) project_directory: PathBuf,
-    pub(crate) convert_windows_paths: bool,
     pub(crate) ignore_orphans: bool,
 }
 
-fn find(directory: &Path, files: &Vec<String>) -> Result<PathBuf> {
+fn find(directory: &Path, files: &[String]) -> Result<PathBuf> {
     let paths = files
         .iter()
         .map(|file| directory.join(file))
@@ -106,7 +105,6 @@ fn resolve(flags: &Flags) -> Result<Config> {
         files,
         profiles: flags.profile.unwrap_or_default(),
         project_directory,
-        convert_windows_paths: flags.convert_windows_paths.unwrap_or_default(),
         ignore_orphans: flags.ignore_orphans.unwrap_or_default(),
     })
 }

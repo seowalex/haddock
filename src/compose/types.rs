@@ -856,8 +856,7 @@ serde_conv!(
             host_ip: parts.next().map(ToString::to_string),
             protocol: container_parts
                 .next()
-                .map(ToString::to_string)
-                .unwrap_or_else(|| String::from("tcp")),
+                .map_or_else(|| String::from("tcp"), ToString::to_string),
         })
     }
 );
