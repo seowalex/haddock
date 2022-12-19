@@ -237,6 +237,7 @@ pub(crate) fn parse(config: Config) -> Result<Compose> {
         })
     });
 
+    let mut all_networks = IndexSet::new();
     let mut all_configs = IndexSet::new();
     let mut all_secrets = IndexSet::new();
 
@@ -248,6 +249,8 @@ pub(crate) fn parse(config: Config) -> Result<Compose> {
                 .to_path_buf();
         }
 
+        all_networks.extend(service.networks.keys());
+
         if let Some(configs) = &service.configs {
             all_configs.extend(configs.into_iter().map(|config| &config.source));
         }
@@ -255,6 +258,30 @@ pub(crate) fn parse(config: Config) -> Result<Compose> {
         if let Some(secrets) = &service.secrets {
             all_secrets.extend(secrets.into_iter().map(|secret| &secret.source));
         }
+    }
+
+    combined_file
+        .networks
+        .entry(String::from("default"))
+        .or_default();
+
+    combined_file
+        .networks
+        .retain(|network, _| all_networks.contains(network));
+
+    for (name, network) in &mut combined_file.networks {
+        network.name.get_or_insert_with(|| {
+            let current_dir = env::current_dir().ok().and_then(|name| {
+                name.file_name()
+                    .map(|name| name.to_string_lossy().to_string())
+            });
+
+            if network.external.unwrap_or_default() || current_dir.is_none() {
+                name.clone()
+            } else {
+                format!("{}_{name}", current_dir.unwrap())
+            }
+        });
     }
 
     if let Some(configs) = &mut combined_file.configs {
@@ -323,6 +350,20 @@ pub(crate) fn parse(config: Config) -> Result<Compose> {
             bail!("Service \"{name}\" cannot have port mappings due to host network mode");
         }
 
+        if let Some(dependencies) = &service.depends_on {
+            for dependency in dependencies.keys() {
+                if !combined_file.services.contains_key(dependency) {
+                    bail!("Service \"{name}\" depends on undefined service \"{dependency}\"");
+                }
+            }
+        }
+
+        for network in service.networks.keys() {
+            if !combined_file.networks.contains_key(network) {
+                bail!("Service \"{name}\" refers to undefined network \"{network}\"",);
+            }
+        }
+
         if let Some(configs) = &service.configs {
             for config in configs {
                 if !combined_file
@@ -354,30 +395,18 @@ pub(crate) fn parse(config: Config) -> Result<Compose> {
                 }
             }
         }
-
-        if let Some(dependencies) = &service.depends_on {
-            for dependency in dependencies.keys() {
-                if !combined_file.services.contains_key(dependency) {
-                    bail!("Service \"{name}\" depends on undefined service \"{dependency}\"");
-                }
-            }
-        }
     }
 
-    if let Some(networks) = &combined_file.networks {
-        for (name, network) in networks {
-            if let Some(network) = network {
-                if network.external.unwrap_or_default()
-                    && (network.driver.is_some()
-                        || network.driver_opts.is_some()
-                        || network.enable_ipv6.is_some()
-                        || network.ipam.is_some()
-                        || network.internal.is_some()
-                        || network.labels.is_some())
-                {
-                    bail!("Conflicting parameters specified for network \"{name}\"");
-                }
-            }
+    for (name, network) in &combined_file.networks {
+        if network.external.unwrap_or_default()
+            && (network.driver.is_some()
+                || network.driver_opts.is_some()
+                || network.enable_ipv6.is_some()
+                || network.ipam.is_some()
+                || network.internal.is_some()
+                || network.labels.is_some())
+        {
+            bail!("Conflicting parameters specified for network \"{name}\"");
         }
     }
 

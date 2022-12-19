@@ -2,13 +2,13 @@ use anyhow::{anyhow, bail, Error, Result};
 use byte_unit::Byte;
 use either::Either;
 use humantime::{format_duration, parse_duration};
-use indexmap::{IndexMap, IndexSet};
+use indexmap::{indexmap, IndexMap, IndexSet};
 use path_absolutize::Absolutize;
 use serde::{Deserialize, Serialize};
 use serde_with::{
     formats::{PreferMany, SpaceSeparator},
-    serde_as, serde_conv, skip_serializing_none, DisplayFromStr, DurationMicroSeconds, OneOrMany,
-    PickFirst, StringWithSeparator,
+    serde_as, serde_conv, skip_serializing_none, DefaultOnNull, DisplayFromStr,
+    DurationMicroSeconds, OneOrMany, PickFirst, StringWithSeparator,
 };
 use serde_yaml::Value;
 use std::{
@@ -22,16 +22,23 @@ use yansi::Paint;
 use crate::utils::{DisplayFromAny, DuplicateInsertsLastWinsSet, EitherPathBufOrString, Merge};
 
 #[skip_serializing_none]
+#[serde_as]
 #[derive(Serialize, Deserialize, Default, Debug)]
 pub(crate) struct Compose {
     pub(crate) version: Option<String>,
     pub(crate) name: Option<String>,
     #[serde(default)]
     pub(crate) services: IndexMap<String, Service>,
-    pub(crate) networks: Option<IndexMap<String, Option<Network>>>,
+    #[serde_as(as = "IndexMap<_, DefaultOnNull>")]
+    #[serde(default = "default_networks")]
+    pub(crate) networks: IndexMap<String, Network>,
     pub(crate) volumes: Option<IndexMap<String, Option<Volume>>>,
     pub(crate) configs: Option<IndexMap<String, Config>>,
     pub(crate) secrets: Option<IndexMap<String, Secret>>,
+}
+
+fn default_networks() -> IndexMap<String, Network> {
+    IndexMap::new()
 }
 
 impl Compose {
@@ -50,7 +57,7 @@ impl Compose {
                 .or_insert(service);
         }
 
-        self.networks.merge(other.networks);
+        self.networks = other.networks;
         self.volumes.merge(other.volumes);
         self.configs.merge(other.configs);
         self.secrets.merge(other.secrets);
@@ -99,14 +106,12 @@ pub(crate) struct Service {
     #[serde_as(as = "Option<OneOrMany<AbsPathBuf, PreferMany>>")]
     pub(crate) env_file: Option<Vec<PathBuf>>,
     #[serde_as(
-        as = "Option<PickFirst<(_, IndexMap<DisplayFromAny, Option<DisplayFromAny>>, MappingWithEqualsNull)>>"
+        as = "Option<PickFirst<(_, IndexMap<_, Option<DisplayFromAny>>, MappingWithEqualsNull)>>"
     )]
     pub(crate) environment: Option<IndexMap<String, Option<String>>>,
     pub(crate) expose: Option<Vec<String>>,
     pub(crate) external_links: Option<Vec<String>>,
-    #[serde_as(
-        as = "Option<PickFirst<(_, IndexMap<DisplayFromAny, DisplayFromAny>, MappingWithColonEmpty)>>"
-    )]
+    #[serde_as(as = "Option<PickFirst<(_, IndexMap<_, DisplayFromAny>, MappingWithColonEmpty)>>")]
     pub(crate) extra_hosts: Option<IndexMap<String, String>>,
     pub(crate) group_add: Option<Vec<String>>,
     pub(crate) healthcheck: Option<Healthcheck>,
@@ -114,9 +119,7 @@ pub(crate) struct Service {
     pub(crate) image: Option<String>,
     pub(crate) init: Option<bool>,
     pub(crate) ipc: Option<String>,
-    #[serde_as(
-        as = "Option<PickFirst<(_, IndexMap<DisplayFromAny, DisplayFromAny>, MappingWithEqualsEmpty)>>"
-    )]
+    #[serde_as(as = "Option<PickFirst<(_, IndexMap<_, DisplayFromAny>, MappingWithEqualsEmpty)>>")]
     pub(crate) labels: Option<IndexMap<String, String>>,
     pub(crate) links: Option<Vec<String>>,
     pub(crate) logging: Option<Logging>,
@@ -125,8 +128,9 @@ pub(crate) struct Service {
     pub(crate) mem_reservation: Option<Byte>,
     pub(crate) mem_swappiness: Option<i64>,
     pub(crate) memswap_limit: Option<SwapLimit>,
-    #[serde_as(as = "Option<PickFirst<(_, NetworksVec)>>")]
-    pub(crate) networks: Option<IndexMap<String, Option<ServiceNetwork>>>,
+    #[serde_as(as = "PickFirst<(_, NetworksVec)>")]
+    #[serde(default = "default_service_networks")]
+    pub(crate) networks: IndexMap<String, Option<ServiceNetwork>>,
     pub(crate) network_mode: Option<String>,
     pub(crate) oom_kill_disable: Option<bool>,
     pub(crate) oom_score_adj: Option<i64>,
@@ -150,7 +154,7 @@ pub(crate) struct Service {
     pub(crate) stop_signal: Option<String>,
     pub(crate) storage_opt: Option<IndexMap<String, String>>,
     #[serde_as(
-        as = "Option<PickFirst<(_, IndexMap<DisplayFromAny, DisplayFromAny>, MappingWithEqualsNoNull)>>"
+        as = "Option<PickFirst<(_, IndexMap<_, DisplayFromAny>, MappingWithEqualsNoNull)>>"
     )]
     pub(crate) sysctls: Option<IndexMap<String, String>>,
     #[serde_as(as = "Option<OneOrMany<_, PreferMany>>")]
@@ -163,6 +167,12 @@ pub(crate) struct Service {
     pub(crate) volumes: Option<IndexSet<ServiceVolume>>,
     pub(crate) volumes_from: Option<Vec<String>>,
     pub(crate) working_dir: Option<PathBuf>,
+}
+
+fn default_service_networks() -> IndexMap<String, Option<ServiceNetwork>> {
+    indexmap! {
+        String::from("default") => None
+    }
 }
 
 impl Service {
@@ -232,26 +242,22 @@ pub(crate) struct BuildConfig {
     #[serde(default = "default_dockerfile")]
     pub(crate) dockerfile: PathBuf,
     #[serde_as(
-        as = "Option<PickFirst<(_, IndexMap<DisplayFromAny, Option<DisplayFromAny>>, MappingWithEqualsNull)>>"
+        as = "Option<PickFirst<(_, IndexMap<_, Option<DisplayFromAny>>, MappingWithEqualsNull)>>"
     )]
     pub(crate) args: Option<IndexMap<String, Option<String>>>,
     #[serde_as(
-        as = "Option<PickFirst<(MappingWithEqualsNullSerialiseAsColon, _, IndexMap<DisplayFromAny, Option<DisplayFromAny>>)>>"
+        as = "Option<PickFirst<(MappingWithEqualsNullSerialiseAsColon, _, IndexMap<_, Option<DisplayFromAny>>)>>"
     )]
     pub(crate) ssh: Option<IndexMap<String, Option<String>>>,
     #[serde_as(as = "Option<Vec<DisplayFromAny>>")]
     pub(crate) cache_from: Option<Vec<String>>,
     #[serde_as(as = "Option<Vec<DisplayFromAny>>")]
     pub(crate) cache_to: Option<Vec<String>>,
-    #[serde_as(
-        as = "Option<PickFirst<(_, IndexMap<DisplayFromAny, DisplayFromAny>, MappingWithColonEmpty)>>"
-    )]
+    #[serde_as(as = "Option<PickFirst<(_, IndexMap<_, DisplayFromAny>, MappingWithColonEmpty)>>")]
     pub(crate) extra_hosts: Option<IndexMap<String, String>>,
     #[serde_as(as = "Option<DisplayFromAny>")]
     pub(crate) isolation: Option<String>,
-    #[serde_as(
-        as = "Option<PickFirst<(_, IndexMap<DisplayFromAny, DisplayFromAny>, MappingWithEqualsEmpty)>>"
-    )]
+    #[serde_as(as = "Option<PickFirst<(_, IndexMap<_, DisplayFromAny>, MappingWithEqualsEmpty)>>")]
     pub(crate) labels: Option<IndexMap<String, String>>,
     pub(crate) no_cache: Option<bool>,
     pub(crate) pull: Option<bool>,
@@ -523,16 +529,14 @@ pub(crate) struct ServiceVolumeTmpfs {
 
 #[skip_serializing_none]
 #[serde_as]
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Default, Debug)]
 pub(crate) struct Network {
     pub(crate) driver: Option<String>,
     pub(crate) driver_opts: Option<IndexMap<String, String>>,
     pub(crate) enable_ipv6: Option<bool>,
     pub(crate) ipam: Option<IpamConfig>,
     pub(crate) internal: Option<bool>,
-    #[serde_as(
-        as = "Option<PickFirst<(_, IndexMap<DisplayFromAny, DisplayFromAny>, MappingWithEqualsEmpty)>>"
-    )]
+    #[serde_as(as = "Option<PickFirst<(_, IndexMap<_, DisplayFromAny>, MappingWithEqualsEmpty)>>")]
     pub(crate) labels: Option<IndexMap<String, String>>,
     pub(crate) external: Option<bool>,
     pub(crate) name: Option<String>,
@@ -560,9 +564,7 @@ pub(crate) struct Volume {
     pub(crate) driver: Option<String>,
     pub(crate) driver_opts: Option<IndexMap<String, String>>,
     pub(crate) external: Option<bool>,
-    #[serde_as(
-        as = "Option<PickFirst<(_, IndexMap<DisplayFromAny, DisplayFromAny>, MappingWithEqualsEmpty)>>"
-    )]
+    #[serde_as(as = "Option<PickFirst<(_, IndexMap<_, DisplayFromAny>, MappingWithEqualsEmpty)>>")]
     pub(crate) labels: Option<IndexMap<String, String>>,
     pub(crate) name: Option<String>,
 }
