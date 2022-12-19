@@ -1,3 +1,10 @@
+use std::{
+    convert::Infallible,
+    hash::{Hash, Hasher},
+    path::{Path, PathBuf},
+    time::Duration,
+};
+
 use anyhow::{anyhow, bail, Error, Result};
 use byte_unit::Byte;
 use humantime::{format_duration, parse_duration};
@@ -10,12 +17,6 @@ use serde_with::{
     DurationMicroSeconds, OneOrMany, PickFirst, StringWithSeparator,
 };
 use serde_yaml::Value;
-use std::{
-    convert::Infallible,
-    hash::{Hash, Hasher},
-    path::{Path, PathBuf},
-    time::Duration,
-};
 use yansi::Paint;
 
 use crate::utils::{DisplayFromAny, DuplicateInsertsLastWinsSet, Merge};
@@ -970,8 +971,9 @@ serde_conv!(
 
 #[cfg(test)]
 mod tests {
-    use pretty_assertions::assert_eq;
     use std::fs;
+
+    use pretty_assertions::assert_eq;
     use test_generator::test_resources;
 
     use super::*;

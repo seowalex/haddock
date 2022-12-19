@@ -1,3 +1,8 @@
+use std::{
+    env,
+    path::{Path, PathBuf},
+};
+
 use anyhow::{anyhow, bail, Context, Result};
 use figment::{
     providers::{Env, Serialized},
@@ -6,10 +11,6 @@ use figment::{
 use itertools::iproduct;
 use once_cell::sync::Lazy;
 use path_absolutize::Absolutize;
-use std::{
-    env,
-    path::{Path, PathBuf},
-};
 
 use crate::Flags;
 

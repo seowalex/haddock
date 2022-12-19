@@ -1,11 +1,12 @@
-use anyhow::{anyhow, Context, Error, Result};
-use clap::ValueEnum;
-use indexmap::IndexSet;
-use path_absolutize::Absolutize;
 use std::{
     fs,
     path::{Path, PathBuf},
 };
+
+use anyhow::{anyhow, Context, Error, Result};
+use clap::ValueEnum;
+use indexmap::IndexSet;
+use path_absolutize::Absolutize;
 
 use crate::{compose, config::Config};
 

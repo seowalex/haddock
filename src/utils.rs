@@ -1,3 +1,5 @@
+use std::{env, fmt, hash::Hash, marker::PhantomData, path::PathBuf};
+
 use indexmap::IndexSet;
 use serde::{
     de::{Error, SeqAccess, Visitor},
@@ -6,7 +8,6 @@ use serde::{
 use serde_with::{
     de::DeserializeAsWrap, formats::Separator, ser::SerializeAsWrap, DeserializeAs, SerializeAs,
 };
-use std::{env, fmt, hash::Hash, marker::PhantomData, path::PathBuf};
 
 macro_rules! regex {
     ($re:literal $(,)?) => {{

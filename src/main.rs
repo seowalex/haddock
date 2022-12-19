@@ -3,6 +3,8 @@ mod compose;
 mod config;
 mod utils;
 
+use std::{env, path::PathBuf};
+
 use anyhow::Result;
 use clap::Parser;
 use serde::{Deserialize, Serialize};
@@ -10,10 +12,8 @@ use serde_with::{
     formats::CommaSeparator, serde_as, skip_serializing_none, BoolFromInt, PickFirst,
     StringWithSeparator,
 };
-use std::{env, path::PathBuf};
 
-use commands::Command;
-use utils::PathSeparator;
+use self::{commands::Command, utils::PathSeparator};
 
 #[derive(Parser, Debug)]
 #[command(version, about, next_display_order = None)]

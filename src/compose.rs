@@ -1,21 +1,24 @@
 mod parser;
 mod types;
 
+use std::{
+    env, fs,
+    io::{self, Read},
+};
+
 use anyhow::{anyhow, bail, Context, Error, Result};
 use clap::crate_name;
 use indexmap::{IndexMap, IndexSet};
 use itertools::Itertools;
 use path_absolutize::Absolutize;
 use serde_yaml::Value;
-use std::{
-    env, fs,
-    io::{self, Read},
-};
 use yansi::Paint;
 
+use self::{
+    parser::{State, Token, Var},
+    types::{Compose, ServiceVolumeType},
+};
 use crate::{config::Config, utils::regex};
-use parser::{State, Token, Var};
-use types::{Compose, ServiceVolumeType};
 
 fn evaluate(tokens: Vec<Token>) -> Result<String> {
     tokens
