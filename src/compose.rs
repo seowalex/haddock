@@ -15,7 +15,7 @@ use yansi::Paint;
 
 use crate::{config::Config, utils::regex};
 use parser::{State, Token, Var};
-use types::Compose;
+use types::{Compose, ServiceVolumeType};
 
 fn evaluate(tokens: Vec<Token>) -> Result<String> {
     tokens
@@ -238,6 +238,7 @@ pub(crate) fn parse(config: Config) -> Result<Compose> {
     });
 
     let mut all_networks = IndexSet::new();
+    let mut all_volumes = IndexSet::new();
     let mut all_configs = IndexSet::new();
     let mut all_secrets = IndexSet::new();
 
@@ -250,6 +251,17 @@ pub(crate) fn parse(config: Config) -> Result<Compose> {
         }
 
         all_networks.extend(service.networks.keys());
+
+        if let Some(volumes) = &service.volumes {
+            all_volumes.extend(
+                volumes
+                    .into_iter()
+                    .filter_map(|volume| match &volume.r#type {
+                        ServiceVolumeType::Volume(source) => source.as_ref(),
+                        _ => None,
+                    }),
+            );
+        }
 
         if let Some(configs) = &service.configs {
             all_configs.extend(configs.into_iter().map(|config| &config.source));
@@ -279,6 +291,31 @@ pub(crate) fn parse(config: Config) -> Result<Compose> {
                 _ => name.clone(),
             }
         });
+    }
+
+    if let Some(volumes) = &mut combined_file.volumes {
+        volumes.retain(|volume, _| all_volumes.contains(volume));
+
+        for (name, volume) in volumes {
+            volume.name.get_or_insert_with(|| {
+                match (
+                    volume.external.unwrap_or_default(),
+                    env::var("COMPOSE_PROJECT_NAME").ok(),
+                ) {
+                    (false, Some(project_name)) => format!("{project_name}_{name}"),
+                    _ => name.clone(),
+                }
+            });
+        }
+    }
+
+    if combined_file
+        .volumes
+        .as_ref()
+        .map(IndexMap::is_empty)
+        .unwrap_or_default()
+    {
+        combined_file.volumes = None;
     }
 
     if let Some(configs) = &mut combined_file.configs {
@@ -355,6 +392,25 @@ pub(crate) fn parse(config: Config) -> Result<Compose> {
             }
         }
 
+        if let Some(volumes) = &service.volumes {
+            for volume in volumes
+                .into_iter()
+                .filter_map(|volume| match &volume.r#type {
+                    ServiceVolumeType::Volume(source) => source.as_ref(),
+                    _ => None,
+                })
+            {
+                if !combined_file
+                    .volumes
+                    .as_ref()
+                    .map(|volumes| volumes.contains_key(volume))
+                    .unwrap_or_default()
+                {
+                    bail!("Service \"{name}\" refers to undefined volume \"{volume}\"");
+                }
+            }
+        }
+
         if let Some(configs) = &service.configs {
             for config in configs {
                 if !combined_file
@@ -403,14 +459,12 @@ pub(crate) fn parse(config: Config) -> Result<Compose> {
 
     if let Some(volumes) = &combined_file.volumes {
         for (name, volume) in volumes {
-            if let Some(volume) = volume {
-                if volume.external.unwrap_or_default()
-                    && (volume.driver.is_some()
-                        || volume.driver_opts.is_some()
-                        || volume.labels.is_some())
-                {
-                    bail!("Conflicting parameters specified for volume \"{name}\"");
-                }
+            if volume.external.unwrap_or_default()
+                && (volume.driver.is_some()
+                    || volume.driver_opts.is_some()
+                    || volume.labels.is_some())
+            {
+                bail!("Conflicting parameters specified for volume \"{name}\"");
             }
         }
     }

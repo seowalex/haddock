@@ -1,6 +1,5 @@
 use anyhow::{anyhow, bail, Error, Result};
 use byte_unit::Byte;
-use either::Either;
 use humantime::{format_duration, parse_duration};
 use indexmap::{indexmap, IndexMap, IndexSet};
 use path_absolutize::Absolutize;
@@ -19,20 +18,21 @@ use std::{
 };
 use yansi::Paint;
 
-use crate::utils::{DisplayFromAny, DuplicateInsertsLastWinsSet, EitherPathBufOrString, Merge};
+use crate::utils::{DisplayFromAny, DuplicateInsertsLastWinsSet, Merge};
 
 #[skip_serializing_none]
 #[serde_as]
 #[derive(Serialize, Deserialize, Default, Debug)]
 pub(crate) struct Compose {
-    pub(crate) version: Option<String>,
     pub(crate) name: Option<String>,
+    pub(crate) version: Option<String>,
     #[serde(default)]
     pub(crate) services: IndexMap<String, Service>,
     #[serde_as(as = "IndexMap<_, DefaultOnNull>")]
     #[serde(default = "default_networks")]
     pub(crate) networks: IndexMap<String, Network>,
-    pub(crate) volumes: Option<IndexMap<String, Option<Volume>>>,
+    #[serde_as(as = "Option<IndexMap<_, DefaultOnNull>>")]
+    pub(crate) volumes: Option<IndexMap<String, Volume>>,
     pub(crate) configs: Option<IndexMap<String, Config>>,
     pub(crate) secrets: Option<IndexMap<String, Secret>>,
 }
@@ -462,9 +462,8 @@ pub(crate) enum ResourceLimit {
 #[serde_as]
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct ServiceVolume {
+    #[serde(flatten)]
     pub(crate) r#type: ServiceVolumeType,
-    #[serde_as(as = "Option<EitherPathBufOrString>")]
-    pub(crate) source: Option<Either<PathBuf, String>>,
     #[serde_as(as = "DisplayFromAny")]
     pub(crate) target: PathBuf,
     pub(crate) read_only: Option<bool>,
@@ -487,11 +486,12 @@ impl Hash for ServiceVolume {
     }
 }
 
+#[serde_as]
 #[derive(Serialize, Deserialize, Debug)]
-#[serde(rename_all = "snake_case")]
+#[serde(tag = "type", content = "source", rename_all = "snake_case")]
 pub(crate) enum ServiceVolumeType {
-    Volume,
-    Bind,
+    Volume(#[serde_as(as = "Option<DisplayFromAny>")] Option<String>),
+    Bind(#[serde_as(as = "PickFirst<(AbsPathBuf, DisplayFromAny)>")] PathBuf),
     Tmpfs,
 }
 
@@ -531,6 +531,7 @@ pub(crate) struct ServiceVolumeTmpfs {
 #[serde_as]
 #[derive(Serialize, Deserialize, Default, Debug)]
 pub(crate) struct Network {
+    pub(crate) name: Option<String>,
     pub(crate) driver: Option<String>,
     pub(crate) driver_opts: Option<IndexMap<String, String>>,
     pub(crate) enable_ipv6: Option<bool>,
@@ -539,7 +540,6 @@ pub(crate) struct Network {
     #[serde_as(as = "Option<PickFirst<(_, IndexMap<_, DisplayFromAny>, MappingWithEqualsEmpty)>>")]
     pub(crate) labels: Option<IndexMap<String, String>>,
     pub(crate) external: Option<bool>,
-    pub(crate) name: Option<String>,
 }
 
 #[skip_serializing_none]
@@ -559,35 +559,35 @@ pub(crate) struct IpamPool {
 
 #[skip_serializing_none]
 #[serde_as]
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Default, Debug)]
 pub(crate) struct Volume {
+    pub(crate) name: Option<String>,
     pub(crate) driver: Option<String>,
     pub(crate) driver_opts: Option<IndexMap<String, String>>,
     pub(crate) external: Option<bool>,
     #[serde_as(as = "Option<PickFirst<(_, IndexMap<_, DisplayFromAny>, MappingWithEqualsEmpty)>>")]
     pub(crate) labels: Option<IndexMap<String, String>>,
-    pub(crate) name: Option<String>,
 }
 
 #[skip_serializing_none]
 #[serde_as]
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct Config {
+    pub(crate) name: Option<String>,
     #[serde_as(as = "Option<AbsPathBuf>")]
     pub(crate) file: Option<PathBuf>,
     pub(crate) external: Option<bool>,
-    pub(crate) name: Option<String>,
 }
 
 #[skip_serializing_none]
 #[serde_as]
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct Secret {
+    pub(crate) name: Option<String>,
     #[serde_as(as = "Option<AbsPathBuf>")]
     pub(crate) file: Option<PathBuf>,
     pub(crate) environment: Option<String>,
     pub(crate) external: Option<bool>,
-    pub(crate) name: Option<String>,
 }
 
 serde_conv!(
@@ -881,8 +881,7 @@ serde_conv!(
     ServiceVolume,
     |_| {},
     |mount: String| -> Result<_> {
-        let mut r#type = ServiceVolumeType::Volume;
-        let mut source = None;
+        let mut r#type = ServiceVolumeType::Volume(None);
         let target;
         let mut read_only = None;
         let mut bind = None;
@@ -896,10 +895,9 @@ serde_conv!(
             }
             [src, dst] if dst.starts_with('/') => {
                 if src.starts_with('/') || src.starts_with('.') {
-                    r#type = ServiceVolumeType::Bind;
-                    source = Some(Either::Left(Path::new(src).absolutize()?.to_path_buf()));
+                    r#type = ServiceVolumeType::Bind(Path::new(src).absolutize()?.to_path_buf());
                 } else {
-                    source = Some(Either::Right(src.to_string()));
+                    r#type = ServiceVolumeType::Volume(Some(src.to_string()));
                 }
 
                 target = dst.to_string();
@@ -910,10 +908,9 @@ serde_conv!(
             }
             [src, dst, opts] => {
                 if src.starts_with('/') || src.starts_with('.') {
-                    r#type = ServiceVolumeType::Bind;
-                    source = Some(Either::Left(Path::new(src).absolutize()?.to_path_buf()));
+                    r#type = ServiceVolumeType::Bind(Path::new(src).absolutize()?.to_path_buf());
                 } else {
-                    source = Some(Either::Right(src.to_string()));
+                    r#type = ServiceVolumeType::Volume(Some(src.to_string()));
                 }
 
                 target = dst.to_string();
@@ -962,7 +959,6 @@ serde_conv!(
 
         Ok(ServiceVolume {
             r#type,
-            source,
             target: PathBuf::from(target),
             read_only,
             bind,

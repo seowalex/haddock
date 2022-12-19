@@ -1,6 +1,4 @@
-use either::Either;
 use indexmap::IndexSet;
-use path_absolutize::Absolutize;
 use serde::{
     de::{Error, SeqAccess, Visitor},
     Deserializer, Serialize, Serializer,
@@ -8,12 +6,7 @@ use serde::{
 use serde_with::{
     de::DeserializeAsWrap, formats::Separator, ser::SerializeAsWrap, DeserializeAs, SerializeAs,
 };
-use std::{
-    env, fmt,
-    hash::Hash,
-    marker::PhantomData,
-    path::{Path, PathBuf},
-};
+use std::{env, fmt, hash::Hash, marker::PhantomData, path::PathBuf};
 
 macro_rules! regex {
     ($re:literal $(,)?) => {{
@@ -127,79 +120,6 @@ impl Separator for PathSeparator {
                 })
                 .into_boxed_str(),
         )
-    }
-}
-
-pub(crate) struct EitherPathBufOrString;
-
-impl<'de> DeserializeAs<'de, Either<PathBuf, String>> for EitherPathBufOrString {
-    fn deserialize_as<D>(deserializer: D) -> Result<Either<PathBuf, String>, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        struct AnyVisitor;
-
-        impl<'de> Visitor<'de> for AnyVisitor {
-            type Value = Either<PathBuf, String>;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-                formatter.write_str("a displayable type")
-            }
-
-            fn visit_bool<E>(self, v: bool) -> Result<Self::Value, E>
-            where
-                E: Error,
-            {
-                Ok(Either::Right(v.to_string()))
-            }
-
-            fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E>
-            where
-                E: Error,
-            {
-                Ok(Either::Right(v.to_string()))
-            }
-
-            fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
-            where
-                E: Error,
-            {
-                Ok(Either::Right(v.to_string()))
-            }
-
-            fn visit_f64<E>(self, v: f64) -> Result<Self::Value, E>
-            where
-                E: Error,
-            {
-                Ok(Either::Right(v.to_string()))
-            }
-
-            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-            where
-                E: Error,
-            {
-                if v.starts_with('/') || v.starts_with('.') {
-                    Path::new(v)
-                        .absolutize()
-                        .map_err(Error::custom)
-                        .map(|path| Either::Left(path.to_path_buf()))
-                } else {
-                    Ok(Either::Right(v.to_string()))
-                }
-            }
-        }
-
-        let visitor = AnyVisitor;
-        deserializer.deserialize_any(visitor)
-    }
-}
-
-impl SerializeAs<Either<PathBuf, String>> for EitherPathBufOrString {
-    fn serialize_as<S>(source: &Either<PathBuf, String>, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        either::for_both!(source, source => source.serialize(serializer))
     }
 }
 

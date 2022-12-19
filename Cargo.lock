@@ -308,7 +308,6 @@ dependencies = [
  "byte-unit",
  "clap",
  "dotenvy",
- "either",
  "figment",
  "humantime",
  "indexmap",
