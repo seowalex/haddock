@@ -3,7 +3,7 @@ services:
     image: alpine
     command: sleep infinity
     healthcheck:
-      test: "false"
+      test: 'false'
       interval: 1s
       retries: 3
   depends:

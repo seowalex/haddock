@@ -4,13 +4,13 @@ services:
   words:
     image: gtardif/sentences-api
     ports:
-      - "95:8080"
+      - '95:8080'
   web:
     image: gtardif/sentences-web
     ports:
-      - "90:80"
+      - '90:80'
     labels:
-      - "my-label=test"
+      - 'my-label=test'
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:80/"]
+      test: ['CMD', 'curl', '-f', 'http://localhost:80/']
       interval: 2s

@@ -21,6 +21,10 @@ pub(crate) struct Args {
     #[arg(short, long)]
     quiet: bool,
 
+    /// Don't interpolate environment variables
+    #[arg(long)]
+    no_interpolate: bool,
+
     /// Print the service names, one per line
     #[arg(long)]
     services: bool,
@@ -49,7 +53,7 @@ enum Format {
 }
 
 pub(crate) fn run(args: Args, config: Config) -> Result<()> {
-    let file = compose::parse(config)?;
+    let file = compose::parse(config, args.no_interpolate)?;
 
     if !args.quiet {
         if args.services {

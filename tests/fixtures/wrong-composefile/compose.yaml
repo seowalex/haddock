@@ -1,4 +1,4 @@
 services:
   simple:
-    image:  nginx:alpine
+    image: nginx:alpine
     wrongField: test

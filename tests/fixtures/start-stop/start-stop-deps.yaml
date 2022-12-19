@@ -1,17 +1,17 @@
 services:
   another_2:
-    image:  nginx:alpine
+    image: nginx:alpine
   another:
-    image:  nginx:alpine
+    image: nginx:alpine
     depends_on:
-    - another_2
+      - another_2
   dep_2:
-    image:  nginx:alpine
+    image: nginx:alpine
   dep_1:
-    image:  nginx:alpine
+    image: nginx:alpine
     depends_on:
-    - dep_2
+      - dep_2
   desired:
-    image:  nginx:alpine
+    image: nginx:alpine
     depends_on:
-    - dep_1
+      - dep_1

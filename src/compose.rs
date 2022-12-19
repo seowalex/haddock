@@ -98,7 +98,7 @@ fn interpolate(value: &Value) -> Result<Value> {
     }
 }
 
-pub(crate) fn parse(config: Config) -> Result<Compose> {
+pub(crate) fn parse(config: Config, no_interpolate: bool) -> Result<Compose> {
     let contents = config
         .files
         .into_iter()
@@ -171,16 +171,20 @@ pub(crate) fn parse(config: Config) -> Result<Compose> {
                 })
         })
         .map(|content| {
-            content.and_then(|(path, content)| {
-                interpolate(&content)
-                    .map_err(|err| match err.chain().collect::<Vec<_>>().split_last() {
-                        Some((err, props)) => {
-                            anyhow!("{}: {err}", props.iter().join("."))
-                        }
-                        None => err,
-                    })
-                    .map(|content| (path, content))
-            })
+            if no_interpolate {
+                content
+            } else {
+                content.and_then(|(path, content)| {
+                    interpolate(&content)
+                        .map_err(|err| match err.chain().collect::<Vec<_>>().split_last() {
+                            Some((err, props)) => {
+                                anyhow!("{}: {err}", props.iter().join("."))
+                            }
+                            None => err,
+                        })
+                        .map(|content| (path, content))
+                })
+            }
         })
         .map(|content| {
             content.and_then(|(path, content)| {

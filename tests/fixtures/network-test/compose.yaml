@@ -1,7 +1,7 @@
 services:
   mydb:
     image: mariadb
-    network_mode: "service:db"
+    network_mode: 'service:db'
     environment:
       - MYSQL_ALLOW_EMPTY_PASSWORD=yes
   db:
@@ -13,16 +13,16 @@ services:
   words:
     image: gtardif/sentences-api
     ports:
-      - "8080:8080"
+      - '8080:8080'
     networks:
       - dbnet
       - servicenet
   web:
     image: gtardif/sentences-web
     ports:
-      - "80:80"
+      - '80:80'
     labels:
-      - "my-label=test"
+      - 'my-label=test'
     networks:
       - servicenet
 

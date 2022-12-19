@@ -4,12 +4,12 @@ services:
     image: alpine
     command: tail -f /dev/null
     depends_on:
-      nginx: {condition: service_healthy}
+      nginx: { condition: service_healthy }
 
   nginx:
     image: nginx:alpine
     healthcheck:
-      test:     "echo | nc -w 5 localhost:80"
+      test: 'echo | nc -w 5 localhost:80'
       interval: 2s
-      timeout:  1s
-      retries:  10
+      timeout: 1s
+      retries: 10

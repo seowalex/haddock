@@ -3,7 +3,7 @@ services:
     image: redis
     command: python app.py
     expose:
-      - "3000"
+      - '3000'
     environment:
       - FOO=original
       - BAR=original

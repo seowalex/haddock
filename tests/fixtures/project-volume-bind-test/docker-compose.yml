@@ -11,4 +11,4 @@ volumes:
     driver_opts:
       type: none
       o: bind
-      device: "${TEST_DIR}"
+      device: '${TEST_DIR}'

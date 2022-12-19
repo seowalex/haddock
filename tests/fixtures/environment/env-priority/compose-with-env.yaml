@@ -4,4 +4,4 @@ services:
     build:
       context: .
     environment:
-      WHEREAMI: "Compose File"
+      WHEREAMI: 'Compose File'

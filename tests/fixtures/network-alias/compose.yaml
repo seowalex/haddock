@@ -1,5 +1,4 @@
 services:
-
   container1:
     image: nginx
     links:

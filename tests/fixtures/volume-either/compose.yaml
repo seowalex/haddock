@@ -13,4 +13,3 @@ services:
       - type: bind
         source: ./bar
         target: /baz
-

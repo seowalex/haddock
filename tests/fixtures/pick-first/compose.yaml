@@ -68,8 +68,8 @@ services:
 networks:
   foo:
     labels:
-        com.example.label-with-empty-value: 0
+      com.example.label-with-empty-value: 0
 volumes:
   foo:
     labels:
-        com.example.label-with-empty-value: 0
+      com.example.label-with-empty-value: 0
