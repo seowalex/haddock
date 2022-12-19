@@ -271,15 +271,12 @@ pub(crate) fn parse(config: Config) -> Result<Compose> {
 
     for (name, network) in &mut combined_file.networks {
         network.name.get_or_insert_with(|| {
-            let current_dir = env::current_dir().ok().and_then(|name| {
-                name.file_name()
-                    .map(|name| name.to_string_lossy().to_string())
-            });
-
-            if network.external.unwrap_or_default() || current_dir.is_none() {
-                name.clone()
-            } else {
-                format!("{}_{name}", current_dir.unwrap())
+            match (
+                network.external.unwrap_or_default(),
+                env::var("COMPOSE_PROJECT_NAME").ok(),
+            ) {
+                (false, Some(project_name)) => format!("{project_name}_{name}"),
+                _ => name.clone(),
             }
         });
     }
@@ -289,15 +286,12 @@ pub(crate) fn parse(config: Config) -> Result<Compose> {
 
         for (name, config) in configs {
             config.name.get_or_insert_with(|| {
-                let current_dir = env::current_dir().ok().and_then(|name| {
-                    name.file_name()
-                        .map(|name| name.to_string_lossy().to_string())
-                });
-
-                if config.external.unwrap_or_default() || current_dir.is_none() {
-                    name.clone()
-                } else {
-                    format!("{}_{name}", current_dir.unwrap())
+                match (
+                    config.external.unwrap_or_default(),
+                    env::var("COMPOSE_PROJECT_NAME").ok(),
+                ) {
+                    (false, Some(project_name)) => format!("{project_name}_{name}"),
+                    _ => name.clone(),
                 }
             });
         }
@@ -317,15 +311,12 @@ pub(crate) fn parse(config: Config) -> Result<Compose> {
 
         for (name, secret) in secrets {
             secret.name.get_or_insert_with(|| {
-                let current_dir = env::current_dir().ok().and_then(|name| {
-                    name.file_name()
-                        .map(|name| name.to_string_lossy().to_string())
-                });
-
-                if secret.external.unwrap_or_default() || current_dir.is_none() {
-                    name.clone()
-                } else {
-                    format!("{}_{name}", current_dir.unwrap())
+                match (
+                    secret.external.unwrap_or_default(),
+                    env::var("COMPOSE_PROJECT_NAME").ok(),
+                ) {
+                    (false, Some(project_name)) => format!("{project_name}_{name}"),
+                    _ => name.clone(),
                 }
             });
         }
