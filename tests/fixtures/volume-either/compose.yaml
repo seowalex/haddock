@@ -13,3 +13,6 @@ services:
       - type: bind
         source: ./bar
         target: /baz
+volumes:
+  foo:
+  bar:

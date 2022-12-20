@@ -499,10 +499,34 @@ pub(crate) fn parse(config: Config, no_interpolate: bool) -> Result<Compose> {
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
     use pretty_assertions::assert_eq;
     use serde_yaml::Value;
+    use test_generator::test_resources;
+    use tokio_test::{assert_err, assert_ok};
 
     use super::*;
+
+    #[test_resources("tests/fixtures/**/*.y*ml")]
+    fn parse(resource: &str) {
+        let config = Config {
+            files: vec![PathBuf::from(resource)],
+            ..Config::default()
+        };
+
+        if [
+            "tests/fixtures/override/compose.yaml",
+            "tests/fixtures/override/compose.expected.yaml",
+            "tests/fixtures/override/compose.override.yaml",
+        ]
+        .contains(&resource)
+        {
+            assert_err!(super::parse(config, false));
+        } else {
+            assert_ok!(super::parse(config, false));
+        }
+    }
 
     #[test]
     fn simple_named() {

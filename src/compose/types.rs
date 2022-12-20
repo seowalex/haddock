@@ -91,7 +91,7 @@ pub(crate) struct Service {
     pub(crate) cpu_shares: Option<i64>,
     pub(crate) cpus: Option<f32>,
     pub(crate) cpuset: Option<String>,
-    #[serde_as(as = "Option<PickFirst<(_, DependsOnVec)>>")]
+    #[serde_as(as = "Option<PickFirst<(_, IndexMap<DisplayFromAny, _>, DependsOnVec)>>")]
     pub(crate) depends_on: Option<IndexMap<String, Dependency>>,
     pub(crate) deploy: Option<DeployConfig>,
     pub(crate) device_cgroup_rules: Option<Vec<String>>,
@@ -107,12 +107,14 @@ pub(crate) struct Service {
     #[serde_as(as = "Option<OneOrMany<AbsPathBuf, PreferMany>>")]
     pub(crate) env_file: Option<Vec<PathBuf>>,
     #[serde_as(
-        as = "Option<PickFirst<(_, IndexMap<_, Option<DisplayFromAny>>, MappingWithEqualsNull)>>"
+        as = "Option<PickFirst<(_, IndexMap<DisplayFromAny, Option<DisplayFromAny>>, MappingWithEqualsNull)>>"
     )]
     pub(crate) environment: Option<IndexMap<String, Option<String>>>,
     pub(crate) expose: Option<Vec<String>>,
     pub(crate) external_links: Option<Vec<String>>,
-    #[serde_as(as = "Option<PickFirst<(_, IndexMap<_, DisplayFromAny>, MappingWithColonEmpty)>>")]
+    #[serde_as(
+        as = "Option<PickFirst<(_, IndexMap<DisplayFromAny, DisplayFromAny>, MappingWithColonEmpty)>>"
+    )]
     pub(crate) extra_hosts: Option<IndexMap<String, String>>,
     pub(crate) group_add: Option<Vec<String>>,
     pub(crate) healthcheck: Option<Healthcheck>,
@@ -120,7 +122,9 @@ pub(crate) struct Service {
     pub(crate) image: Option<String>,
     pub(crate) init: Option<bool>,
     pub(crate) ipc: Option<String>,
-    #[serde_as(as = "Option<PickFirst<(_, IndexMap<_, DisplayFromAny>, MappingWithEqualsEmpty)>>")]
+    #[serde_as(
+        as = "Option<PickFirst<(_, IndexMap<DisplayFromAny, DisplayFromAny>, MappingWithEqualsEmpty)>>"
+    )]
     pub(crate) labels: Option<IndexMap<String, String>>,
     pub(crate) links: Option<Vec<String>>,
     pub(crate) logging: Option<Logging>,
@@ -129,7 +133,7 @@ pub(crate) struct Service {
     pub(crate) mem_reservation: Option<Byte>,
     pub(crate) mem_swappiness: Option<i64>,
     pub(crate) memswap_limit: Option<SwapLimit>,
-    #[serde_as(as = "PickFirst<(_, NetworksVec)>")]
+    #[serde_as(as = "PickFirst<(_, IndexMap<DisplayFromAny, _>, NetworksVec)>")]
     #[serde(default = "default_service_networks")]
     pub(crate) networks: IndexMap<String, Option<ServiceNetwork>>,
     pub(crate) network_mode: Option<String>,
@@ -155,7 +159,7 @@ pub(crate) struct Service {
     pub(crate) stop_signal: Option<String>,
     pub(crate) storage_opt: Option<IndexMap<String, String>>,
     #[serde_as(
-        as = "Option<PickFirst<(_, IndexMap<_, DisplayFromAny>, MappingWithEqualsNoNull)>>"
+        as = "Option<PickFirst<(_, IndexMap<DisplayFromAny, DisplayFromAny>, MappingWithEqualsNoNull)>>"
     )]
     pub(crate) sysctls: Option<IndexMap<String, String>>,
     #[serde_as(as = "Option<OneOrMany<_, PreferMany>>")]
@@ -243,22 +247,26 @@ pub(crate) struct BuildConfig {
     #[serde(default = "default_dockerfile")]
     pub(crate) dockerfile: PathBuf,
     #[serde_as(
-        as = "Option<PickFirst<(_, IndexMap<_, Option<DisplayFromAny>>, MappingWithEqualsNull)>>"
+        as = "Option<PickFirst<(_, IndexMap<DisplayFromAny, Option<DisplayFromAny>>, MappingWithEqualsNull)>>"
     )]
     pub(crate) args: Option<IndexMap<String, Option<String>>>,
     #[serde_as(
-        as = "Option<PickFirst<(MappingWithEqualsNullSerialiseAsColon, _, IndexMap<_, Option<DisplayFromAny>>)>>"
+        as = "Option<PickFirst<(MappingWithEqualsNullSerialiseAsColon, _, IndexMap<DisplayFromAny, Option<DisplayFromAny>>)>>"
     )]
     pub(crate) ssh: Option<IndexMap<String, Option<String>>>,
     #[serde_as(as = "Option<Vec<DisplayFromAny>>")]
     pub(crate) cache_from: Option<Vec<String>>,
     #[serde_as(as = "Option<Vec<DisplayFromAny>>")]
     pub(crate) cache_to: Option<Vec<String>>,
-    #[serde_as(as = "Option<PickFirst<(_, IndexMap<_, DisplayFromAny>, MappingWithColonEmpty)>>")]
+    #[serde_as(
+        as = "Option<PickFirst<(_, IndexMap<DisplayFromAny, DisplayFromAny>, MappingWithColonEmpty)>>"
+    )]
     pub(crate) extra_hosts: Option<IndexMap<String, String>>,
     #[serde_as(as = "Option<DisplayFromAny>")]
     pub(crate) isolation: Option<String>,
-    #[serde_as(as = "Option<PickFirst<(_, IndexMap<_, DisplayFromAny>, MappingWithEqualsEmpty)>>")]
+    #[serde_as(
+        as = "Option<PickFirst<(_, IndexMap<DisplayFromAny, DisplayFromAny>, MappingWithEqualsEmpty)>>"
+    )]
     pub(crate) labels: Option<IndexMap<String, String>>,
     pub(crate) no_cache: Option<bool>,
     pub(crate) pull: Option<bool>,
@@ -538,7 +546,9 @@ pub(crate) struct Network {
     pub(crate) enable_ipv6: Option<bool>,
     pub(crate) ipam: Option<IpamConfig>,
     pub(crate) internal: Option<bool>,
-    #[serde_as(as = "Option<PickFirst<(_, IndexMap<_, DisplayFromAny>, MappingWithEqualsEmpty)>>")]
+    #[serde_as(
+        as = "Option<PickFirst<(_, IndexMap<DisplayFromAny, DisplayFromAny>, MappingWithEqualsEmpty)>>"
+    )]
     pub(crate) labels: Option<IndexMap<String, String>>,
     pub(crate) external: Option<bool>,
 }
@@ -566,7 +576,9 @@ pub(crate) struct Volume {
     pub(crate) driver: Option<String>,
     pub(crate) driver_opts: Option<IndexMap<String, String>>,
     pub(crate) external: Option<bool>,
-    #[serde_as(as = "Option<PickFirst<(_, IndexMap<_, DisplayFromAny>, MappingWithEqualsEmpty)>>")]
+    #[serde_as(
+        as = "Option<PickFirst<(_, IndexMap<DisplayFromAny, DisplayFromAny>, MappingWithEqualsEmpty)>>"
+    )]
     pub(crate) labels: Option<IndexMap<String, String>>,
 }
 
@@ -975,6 +987,7 @@ mod tests {
 
     use pretty_assertions::assert_eq;
     use test_generator::test_resources;
+    use tokio_test::assert_ok;
 
     use super::*;
 
@@ -982,7 +995,7 @@ mod tests {
     fn serde(resource: &str) {
         let contents = fs::read_to_string(resource).unwrap();
 
-        assert!(serde_yaml::from_str::<Compose>(&contents).is_ok());
+        assert_ok!(serde_yaml::from_str::<Compose>(&contents));
     }
 
     #[test]

@@ -20,7 +20,7 @@ static COMPOSE_FILE_NAMES: Lazy<Vec<String>> = Lazy::new(|| {
         .collect()
 });
 
-#[derive(Debug)]
+#[derive(Default, Debug)]
 pub(crate) struct Config {
     pub(crate) project_name: Option<String>,
     pub(crate) files: Vec<PathBuf>,
