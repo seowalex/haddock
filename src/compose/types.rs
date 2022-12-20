@@ -495,6 +495,7 @@ impl Hash for ServiceVolume {
     }
 }
 
+#[skip_serializing_none]
 #[serde_as]
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(tag = "type", content = "source", rename_all = "snake_case")]
@@ -513,12 +514,6 @@ pub(crate) struct ServiceVolumeBind {
     pub(crate) create_host_path: Option<bool>,
     #[serde_as(as = "Option<DisplayFromAny>")]
     pub(crate) selinux: Option<String>,
-}
-
-impl ServiceVolumeBind {
-    pub(crate) fn new() -> Self {
-        Self::default()
-    }
 }
 
 #[skip_serializing_none]
@@ -909,6 +904,10 @@ serde_conv!(
             [src, dst] if dst.starts_with('/') => {
                 if src.starts_with('/') || src.starts_with('.') {
                     r#type = ServiceVolumeType::Bind(Path::new(src).absolutize()?.to_path_buf());
+                    bind = Some(ServiceVolumeBind {
+                        create_host_path: Some(true),
+                        ..ServiceVolumeBind::default()
+                    });
                 } else {
                     r#type = ServiceVolumeType::Volume(Some(src.to_string()));
                 }
@@ -922,6 +921,10 @@ serde_conv!(
             [src, dst, opts] => {
                 if src.starts_with('/') || src.starts_with('.') {
                     r#type = ServiceVolumeType::Bind(Path::new(src).absolutize()?.to_path_buf());
+                    bind = Some(ServiceVolumeBind {
+                        create_host_path: Some(true),
+                        ..ServiceVolumeBind::default()
+                    });
                 } else {
                     r#type = ServiceVolumeType::Volume(Some(src.to_string()));
                 }
@@ -944,11 +947,12 @@ serde_conv!(
                 }
                 "shared" | "rshared" | "slave" | "rslave" | "private" | "rprivate"
                 | "unbindable" | "runbindable" => {
-                    bind.get_or_insert(ServiceVolumeBind::new()).propagation =
+                    bind.get_or_insert(ServiceVolumeBind::default()).propagation =
                         Some(option.to_string());
                 }
                 "z" | "Z" => {
-                    bind.get_or_insert(ServiceVolumeBind::new()).selinux = Some(option.to_string());
+                    bind.get_or_insert(ServiceVolumeBind::default()).selinux =
+                        Some(option.to_string());
                 }
                 "copy" | "nocopy" => {
                     volume = Some(ServiceVolumeVolume {
