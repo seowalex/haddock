@@ -76,8 +76,7 @@ where
             }
         }
 
-        let visitor = AnyVisitor(PhantomData);
-        deserializer.deserialize_any(visitor)
+        deserializer.deserialize_any(AnyVisitor(PhantomData))
     }
 }
 
@@ -134,8 +133,7 @@ where
             }
         }
 
-        let visitor = SeqVisitor::<T, U>(PhantomData);
-        deserializer.deserialize_seq(visitor)
+        deserializer.deserialize_seq(SeqVisitor::<T, U>(PhantomData))
     }
 }
 
@@ -149,33 +147,6 @@ where
         S: Serializer,
     {
         serializer.collect_seq(source.iter().map(|item| SerializeAsWrap::<T, U>::new(item)))
-    }
-}
-
-pub(crate) trait Merge<T> {
-    fn merge<A>(&mut self, other: Self)
-    where
-        T: Extend<A> + IntoIterator<Item = A>;
-
-    fn merge_one(&mut self, other: Self);
-}
-
-impl<T> Merge<T> for Option<T> {
-    fn merge<A>(&mut self, other: Self)
-    where
-        T: Extend<A> + IntoIterator<Item = A>,
-    {
-        match (self, other) {
-            (Some(a), Some(b)) => a.extend(b),
-            (a @ None, b @ Some(_)) => *a = b,
-            _ => {}
-        }
-    }
-
-    fn merge_one(&mut self, other: Self) {
-        if other.is_some() {
-            *self = other;
-        }
     }
 }
 

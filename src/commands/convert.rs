@@ -62,10 +62,8 @@ pub(crate) fn run(args: Args, config: Config) -> Result<()> {
                 println!("{service}");
             }
         } else if args.volumes {
-            if let Some(volumes) = file.volumes {
-                for volume in volumes.into_keys() {
-                    println!("{volume}");
-                }
+            for volume in file.volumes.into_keys() {
+                println!("{volume}");
             }
         } else if args.profiles {
             let mut all_profiles = IndexSet::new();

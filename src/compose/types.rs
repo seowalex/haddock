@@ -19,27 +19,26 @@ use serde_with::{
 use serde_yaml::Value;
 use yansi::Paint;
 
-use crate::utils::{DisplayFromAny, DuplicateInsertsLastWinsSet, Merge};
+use crate::utils::{DisplayFromAny, DuplicateInsertsLastWinsSet};
 
 #[skip_serializing_none]
 #[serde_as]
+#[serde_with::apply(
+    IndexMap => #[serde(skip_serializing_if = "IndexMap::is_empty", default)]
+)]
 #[derive(Serialize, Deserialize, Default, Debug)]
 pub(crate) struct Compose {
     pub(crate) name: Option<String>,
     pub(crate) version: Option<String>,
-    #[serde(default)]
     pub(crate) services: IndexMap<String, Service>,
     #[serde_as(as = "IndexMap<_, DefaultOnNull>")]
-    #[serde(default = "default_networks")]
+    #[serde_with(skip_apply)]
+    #[serde(default)]
     pub(crate) networks: IndexMap<String, Network>,
-    #[serde_as(as = "Option<IndexMap<_, DefaultOnNull>>")]
-    pub(crate) volumes: Option<IndexMap<String, Volume>>,
-    pub(crate) configs: Option<IndexMap<String, Config>>,
-    pub(crate) secrets: Option<IndexMap<String, Secret>>,
-}
-
-fn default_networks() -> IndexMap<String, Network> {
-    IndexMap::new()
+    #[serde_as(as = "IndexMap<_, DefaultOnNull>")]
+    pub(crate) volumes: IndexMap<String, Volume>,
+    pub(crate) configs: IndexMap<String, Config>,
+    pub(crate) secrets: IndexMap<String, Secret>,
 }
 
 impl Compose {
@@ -48,8 +47,13 @@ impl Compose {
     }
 
     pub(crate) fn merge(&mut self, other: Self) {
-        self.version.merge_one(other.version);
-        self.name.merge_one(other.name);
+        if other.version.is_some() {
+            self.version = other.version;
+        }
+
+        if other.name.is_some() {
+            self.name = other.name;
+        }
 
         for (name, service) in other.services {
             self.services
@@ -59,9 +63,9 @@ impl Compose {
         }
 
         self.networks = other.networks;
-        self.volumes.merge(other.volumes);
-        self.configs.merge(other.configs);
-        self.secrets.merge(other.secrets);
+        self.volumes = other.volumes;
+        self.configs = other.configs;
+        self.secrets = other.secrets;
     }
 }
 
@@ -842,7 +846,7 @@ serde_conv!(
             }
         }
 
-        if port.protocol == "udp" {
+        if port.protocol != "tcp" {
             string = format!("{string}/{}", port.protocol);
         }
 

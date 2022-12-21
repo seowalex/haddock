@@ -8,7 +8,7 @@ use std::{
 
 use anyhow::{anyhow, bail, Context, Error, Result};
 use clap::crate_name;
-use indexmap::{IndexMap, IndexSet};
+use indexmap::IndexSet;
 use itertools::Itertools;
 use path_absolutize::Absolutize;
 use serde_yaml::Value;
@@ -283,7 +283,6 @@ pub(crate) fn parse(config: Config, no_interpolate: bool) -> Result<Compose> {
         .networks
         .entry(String::from("default"))
         .or_default();
-
     combined_file
         .networks
         .retain(|network, _| all_networks.contains(network));
@@ -300,79 +299,52 @@ pub(crate) fn parse(config: Config, no_interpolate: bool) -> Result<Compose> {
         });
     }
 
-    if let Some(volumes) = &mut combined_file.volumes {
-        volumes.retain(|volume, _| all_volumes.contains(volume));
-
-        for (name, volume) in volumes {
-            volume.name.get_or_insert_with(|| {
-                match (
-                    volume.external.unwrap_or_default(),
-                    env::var("COMPOSE_PROJECT_NAME").ok(),
-                ) {
-                    (false, Some(project_name)) => format!("{project_name}_{name}"),
-                    _ => name.clone(),
-                }
-            });
-        }
-    }
-
-    if combined_file
+    combined_file
         .volumes
-        .as_ref()
-        .map(IndexMap::is_empty)
-        .unwrap_or_default()
-    {
-        combined_file.volumes = None;
+        .retain(|volume, _| all_volumes.contains(volume));
+
+    for (name, volume) in &mut combined_file.volumes {
+        volume.name.get_or_insert_with(|| {
+            match (
+                volume.external.unwrap_or_default(),
+                env::var("COMPOSE_PROJECT_NAME").ok(),
+            ) {
+                (false, Some(project_name)) => format!("{project_name}_{name}"),
+                _ => name.clone(),
+            }
+        });
     }
 
-    if let Some(configs) = &mut combined_file.configs {
-        configs.retain(|config, _| all_configs.contains(config));
-
-        for (name, config) in configs {
-            config.name.get_or_insert_with(|| {
-                match (
-                    config.external.unwrap_or_default(),
-                    env::var("COMPOSE_PROJECT_NAME").ok(),
-                ) {
-                    (false, Some(project_name)) => format!("{project_name}_{name}"),
-                    _ => name.clone(),
-                }
-            });
-        }
-    }
-
-    if combined_file
+    combined_file
         .configs
-        .as_ref()
-        .map(IndexMap::is_empty)
-        .unwrap_or_default()
-    {
-        combined_file.configs = None;
+        .retain(|config, _| all_configs.contains(config));
+
+    for (name, config) in &mut combined_file.configs {
+        config.name.get_or_insert_with(|| {
+            match (
+                config.external.unwrap_or_default(),
+                env::var("COMPOSE_PROJECT_NAME").ok(),
+            ) {
+                (false, Some(project_name)) => format!("{project_name}_{name}"),
+                _ => name.clone(),
+            }
+        });
     }
 
-    if let Some(secrets) = &mut combined_file.secrets {
-        secrets.retain(|secrets, _| all_secrets.contains(secrets));
-
-        for (name, secret) in secrets {
-            secret.name.get_or_insert_with(|| {
-                match (
-                    secret.external.unwrap_or_default(),
-                    env::var("COMPOSE_PROJECT_NAME").ok(),
-                ) {
-                    (false, Some(project_name)) => format!("{project_name}_{name}"),
-                    _ => name.clone(),
-                }
-            });
-        }
-    }
-
-    if combined_file
+    combined_file
         .secrets
-        .as_ref()
-        .map(IndexMap::is_empty)
-        .unwrap_or_default()
-    {
-        combined_file.secrets = None;
+        .retain(|secrets, _| all_secrets.contains(secrets));
+
+    for (name, secret) in &mut combined_file.secrets {
+        secret.name.get_or_insert_with(|| {
+            match (
+                secret.external.unwrap_or_default(),
+                env::var("COMPOSE_PROJECT_NAME").ok(),
+            ) {
+                (false, Some(project_name)) => format!("{project_name}_{name}"),
+                _ => name.clone(),
+            }
+        });
     }
 
     for (name, service) in &combined_file.services {
@@ -407,12 +379,7 @@ pub(crate) fn parse(config: Config, no_interpolate: bool) -> Result<Compose> {
                     _ => None,
                 })
             {
-                if !combined_file
-                    .volumes
-                    .as_ref()
-                    .map(|volumes| volumes.contains_key(volume))
-                    .unwrap_or_default()
-                {
+                if !combined_file.volumes.contains_key(volume) {
                     bail!("Service \"{name}\" refers to undefined volume \"{volume}\"");
                 }
             }
@@ -420,12 +387,7 @@ pub(crate) fn parse(config: Config, no_interpolate: bool) -> Result<Compose> {
 
         if let Some(configs) = &service.configs {
             for config in configs {
-                if !combined_file
-                    .configs
-                    .as_ref()
-                    .map(|configs| configs.contains_key(&config.source))
-                    .unwrap_or_default()
-                {
+                if !combined_file.configs.contains_key(&config.source) {
                     bail!(
                         "Service \"{name}\" refers to undefined config \"{}\"",
                         config.source
@@ -436,12 +398,7 @@ pub(crate) fn parse(config: Config, no_interpolate: bool) -> Result<Compose> {
 
         if let Some(secrets) = &service.secrets {
             for secret in secrets {
-                if !combined_file
-                    .secrets
-                    .as_ref()
-                    .map(|secrets| secrets.contains_key(&secret.source))
-                    .unwrap_or_default()
-                {
+                if !combined_file.secrets.contains_key(&secret.source) {
                     bail!(
                         "Service \"{name}\" refers to undefined secret \"{}\"",
                         secret.source
@@ -464,33 +421,25 @@ pub(crate) fn parse(config: Config, no_interpolate: bool) -> Result<Compose> {
         }
     }
 
-    if let Some(volumes) = &combined_file.volumes {
-        for (name, volume) in volumes {
-            if volume.external.unwrap_or_default()
-                && (volume.driver.is_some()
-                    || volume.driver_opts.is_some()
-                    || volume.labels.is_some())
-            {
-                bail!("Conflicting parameters specified for volume \"{name}\"");
-            }
+    for (name, volume) in &combined_file.volumes {
+        if volume.external.unwrap_or_default()
+            && (volume.driver.is_some() || volume.driver_opts.is_some() || volume.labels.is_some())
+        {
+            bail!("Conflicting parameters specified for volume \"{name}\"");
         }
     }
 
-    if let Some(configs) = &combined_file.configs {
-        for (name, config) in configs {
-            if config.external.unwrap_or_default() && config.file.is_some() {
-                bail!("Conflicting parameters specified for config \"{name}\"");
-            }
+    for (name, config) in &combined_file.configs {
+        if config.external.unwrap_or_default() && config.file.is_some() {
+            bail!("Conflicting parameters specified for config \"{name}\"");
         }
     }
 
-    if let Some(secrets) = &combined_file.secrets {
-        for (name, secret) in secrets {
-            if secret.external.unwrap_or_default()
-                && (secret.file.is_some() || secret.environment.is_some())
-            {
-                bail!("Conflicting parameters specified for secret \"{name}\"");
-            }
+    for (name, secret) in &combined_file.secrets {
+        if secret.external.unwrap_or_default()
+            && (secret.file.is_some() || secret.environment.is_some())
+        {
+            bail!("Conflicting parameters specified for secret \"{name}\"");
         }
     }
 
