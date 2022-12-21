@@ -69,9 +69,7 @@ pub(crate) fn run(args: Args, config: Config) -> Result<()> {
             let mut all_profiles = IndexSet::new();
 
             for service in file.services.into_values() {
-                if let Some(profiles) = service.profiles {
-                    all_profiles.extend(profiles);
-                }
+                all_profiles.extend(service.profiles);
             }
 
             for profile in all_profiles {

@@ -229,19 +229,17 @@ pub(crate) fn parse(config: Config, no_interpolate: bool) -> Result<Compose> {
     }
 
     combined_file.services.retain(|_, service| {
-        service.profiles.as_ref().map_or(true, |profiles| {
-            if profiles.is_empty() {
+        if service.profiles.is_empty() {
+            return true;
+        }
+
+        for profile in &service.profiles {
+            if config.profiles.contains(profile) {
                 return true;
             }
+        }
 
-            for profile in profiles {
-                if config.profiles.contains(profile) {
-                    return true;
-                }
-            }
-
-            false
-        })
+        false
     });
 
     let mut all_networks = IndexSet::new();
@@ -258,25 +256,17 @@ pub(crate) fn parse(config: Config, no_interpolate: bool) -> Result<Compose> {
         }
 
         all_networks.extend(service.networks.keys());
-
-        if let Some(volumes) = &service.volumes {
-            all_volumes.extend(
-                volumes
-                    .into_iter()
-                    .filter_map(|volume| match &volume.r#type {
-                        ServiceVolumeType::Volume(source) => source.as_ref(),
-                        _ => None,
-                    }),
-            );
-        }
-
-        if let Some(configs) = &service.configs {
-            all_configs.extend(configs.into_iter().map(|config| &config.source));
-        }
-
-        if let Some(secrets) = &service.secrets {
-            all_secrets.extend(secrets.into_iter().map(|secret| &secret.source));
-        }
+        all_volumes.extend(
+            service
+                .volumes
+                .iter()
+                .filter_map(|volume| match &volume.r#type {
+                    ServiceVolumeType::Volume(source) => source.as_ref(),
+                    _ => None,
+                }),
+        );
+        all_configs.extend(service.configs.iter().map(|config| &config.source));
+        all_secrets.extend(service.secrets.iter().map(|secret| &secret.source));
     }
 
     combined_file
@@ -352,16 +342,15 @@ pub(crate) fn parse(config: Config, no_interpolate: bool) -> Result<Compose> {
             bail!("Service \"{name}\" has neither an image nor a build context specified");
         }
 
-        if service.network_mode.as_deref().unwrap_or_default() == "host" && service.ports.is_some()
+        if service.network_mode.as_deref().unwrap_or_default() == "host"
+            && !service.ports.is_empty()
         {
             bail!("Service \"{name}\" cannot have port mappings due to host network mode");
         }
 
-        if let Some(dependencies) = &service.depends_on {
-            for dependency in dependencies.keys() {
-                if !combined_file.services.contains_key(dependency) {
-                    bail!("Service \"{name}\" depends on undefined service \"{dependency}\"");
-                }
+        for dependency in service.depends_on.keys() {
+            if !combined_file.services.contains_key(dependency) {
+                bail!("Service \"{name}\" depends on undefined service \"{dependency}\"");
             }
         }
 
@@ -371,39 +360,34 @@ pub(crate) fn parse(config: Config, no_interpolate: bool) -> Result<Compose> {
             }
         }
 
-        if let Some(volumes) = &service.volumes {
-            for volume in volumes
-                .into_iter()
-                .filter_map(|volume| match &volume.r#type {
-                    ServiceVolumeType::Volume(source) => source.as_ref(),
-                    _ => None,
-                })
-            {
-                if !combined_file.volumes.contains_key(volume) {
-                    bail!("Service \"{name}\" refers to undefined volume \"{volume}\"");
-                }
+        for volume in service
+            .volumes
+            .iter()
+            .filter_map(|volume| match &volume.r#type {
+                ServiceVolumeType::Volume(source) => source.as_ref(),
+                _ => None,
+            })
+        {
+            if !combined_file.volumes.contains_key(volume) {
+                bail!("Service \"{name}\" refers to undefined volume \"{volume}\"");
             }
         }
 
-        if let Some(configs) = &service.configs {
-            for config in configs {
-                if !combined_file.configs.contains_key(&config.source) {
-                    bail!(
-                        "Service \"{name}\" refers to undefined config \"{}\"",
-                        config.source
-                    );
-                }
+        for config in &service.configs {
+            if !combined_file.configs.contains_key(&config.source) {
+                bail!(
+                    "Service \"{name}\" refers to undefined config \"{}\"",
+                    config.source
+                );
             }
         }
 
-        if let Some(secrets) = &service.secrets {
-            for secret in secrets {
-                if !combined_file.secrets.contains_key(&secret.source) {
-                    bail!(
-                        "Service \"{name}\" refers to undefined secret \"{}\"",
-                        secret.source
-                    );
-                }
+        for secret in &service.secrets {
+            if !combined_file.secrets.contains_key(&secret.source) {
+                bail!(
+                    "Service \"{name}\" refers to undefined secret \"{}\"",
+                    secret.source
+                );
             }
         }
     }
@@ -411,11 +395,11 @@ pub(crate) fn parse(config: Config, no_interpolate: bool) -> Result<Compose> {
     for (name, network) in &combined_file.networks {
         if network.external.unwrap_or_default()
             && (network.driver.is_some()
-                || network.driver_opts.is_some()
+                || !network.driver_opts.is_empty()
                 || network.enable_ipv6.is_some()
                 || network.ipam.is_some()
                 || network.internal.is_some()
-                || network.labels.is_some())
+                || !network.labels.is_empty())
         {
             bail!("Conflicting parameters specified for network \"{name}\"");
         }
@@ -423,7 +407,9 @@ pub(crate) fn parse(config: Config, no_interpolate: bool) -> Result<Compose> {
 
     for (name, volume) in &combined_file.volumes {
         if volume.external.unwrap_or_default()
-            && (volume.driver.is_some() || volume.driver_opts.is_some() || volume.labels.is_some())
+            && (volume.driver.is_some()
+                || !volume.driver_opts.is_empty()
+                || !volume.labels.is_empty())
         {
             bail!("Conflicting parameters specified for volume \"{name}\"");
         }

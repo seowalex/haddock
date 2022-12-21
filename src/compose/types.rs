@@ -30,10 +30,10 @@ use crate::utils::{DisplayFromAny, DuplicateInsertsLastWinsSet};
 pub(crate) struct Compose {
     pub(crate) name: Option<String>,
     pub(crate) version: Option<String>,
-    pub(crate) services: IndexMap<String, Service>,
-    #[serde_as(as = "IndexMap<_, DefaultOnNull>")]
     #[serde_with(skip_apply)]
     #[serde(default)]
+    pub(crate) services: IndexMap<String, Service>,
+    #[serde_as(as = "IndexMap<_, DefaultOnNull>")]
     pub(crate) networks: IndexMap<String, Network>,
     #[serde_as(as = "IndexMap<_, DefaultOnNull>")]
     pub(crate) volumes: IndexMap<String, Volume>,
@@ -71,18 +71,23 @@ impl Compose {
 
 #[skip_serializing_none]
 #[serde_as]
+#[serde_with::apply(
+    IndexMap => #[serde(skip_serializing_if = "IndexMap::is_empty", default)],
+    IndexSet => #[serde(skip_serializing_if = "IndexSet::is_empty", default)],
+    Vec => #[serde(skip_serializing_if = "Vec::is_empty", default)]
+)]
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct Service {
     pub(crate) blkio_config: Option<BlkioConfig>,
     #[serde_as(as = "Option<PickFirst<(_, BuildConfigOrPathBuf)>>")]
     pub(crate) build: Option<BuildConfig>,
-    pub(crate) cap_add: Option<Vec<String>>,
-    pub(crate) cap_drop: Option<Vec<String>>,
+    pub(crate) cap_add: Vec<String>,
+    pub(crate) cap_drop: Vec<String>,
     pub(crate) cgroup_parent: Option<String>,
-    #[serde_as(as = "Option<PickFirst<(_, StringWithSeparator::<SpaceSeparator, String>)>>")]
-    pub(crate) command: Option<Vec<String>>,
-    #[serde_as(as = "Option<DuplicateInsertsLastWinsSet<PickFirst<(_, FileReferenceOrString)>>>")]
-    pub(crate) configs: Option<IndexSet<FileReference>>,
+    #[serde_as(as = "PickFirst<(_, StringWithSeparator::<SpaceSeparator, String>)>")]
+    pub(crate) command: Vec<String>,
+    #[serde_as(as = "DuplicateInsertsLastWinsSet<PickFirst<(_, FileReferenceOrString)>>")]
+    pub(crate) configs: IndexSet<FileReference>,
     pub(crate) container_name: Option<String>,
     #[serde_as(as = "Option<PickFirst<(DurationMicroSeconds, DurationWithSuffix)>>")]
     pub(crate) cpu_period: Option<Duration>,
@@ -95,42 +100,42 @@ pub(crate) struct Service {
     pub(crate) cpu_shares: Option<i64>,
     pub(crate) cpus: Option<f32>,
     pub(crate) cpuset: Option<String>,
-    #[serde_as(as = "Option<PickFirst<(_, IndexMap<DisplayFromAny, _>, DependsOnVec)>>")]
-    pub(crate) depends_on: Option<IndexMap<String, Dependency>>,
+    #[serde_as(as = "PickFirst<(_, IndexMap<DisplayFromAny, _>, DependsOnVec)>")]
+    pub(crate) depends_on: IndexMap<String, Dependency>,
     pub(crate) deploy: Option<DeployConfig>,
-    pub(crate) device_cgroup_rules: Option<Vec<String>>,
-    #[serde_as(as = "Option<DuplicateInsertsLastWinsSet<DeviceOrString>>")]
-    pub(crate) devices: Option<IndexSet<Device>>,
-    #[serde_as(as = "Option<OneOrMany<_, PreferMany>>")]
-    pub(crate) dns: Option<Vec<String>>,
-    pub(crate) dns_opt: Option<Vec<String>>,
-    #[serde_as(as = "Option<OneOrMany<_, PreferMany>>")]
-    pub(crate) dns_search: Option<Vec<String>>,
-    #[serde_as(as = "Option<PickFirst<(_, StringWithSeparator::<SpaceSeparator, String>)>>")]
-    pub(crate) entrypoint: Option<Vec<String>>,
-    #[serde_as(as = "Option<OneOrMany<AbsPathBuf, PreferMany>>")]
-    pub(crate) env_file: Option<Vec<PathBuf>>,
+    pub(crate) device_cgroup_rules: Vec<String>,
+    #[serde_as(as = "DuplicateInsertsLastWinsSet<DeviceOrString>")]
+    pub(crate) devices: IndexSet<Device>,
+    #[serde_as(as = "OneOrMany<_, PreferMany>")]
+    pub(crate) dns: Vec<String>,
+    pub(crate) dns_opt: Vec<String>,
+    #[serde_as(as = "OneOrMany<_, PreferMany>")]
+    pub(crate) dns_search: Vec<String>,
+    #[serde_as(as = "PickFirst<(_, StringWithSeparator::<SpaceSeparator, String>)>")]
+    pub(crate) entrypoint: Vec<String>,
+    #[serde_as(as = "OneOrMany<AbsPathBuf, PreferMany>")]
+    pub(crate) env_file: Vec<PathBuf>,
     #[serde_as(
-        as = "Option<PickFirst<(_, IndexMap<DisplayFromAny, Option<DisplayFromAny>>, MappingWithEqualsNull)>>"
+        as = "PickFirst<(_, IndexMap<DisplayFromAny, Option<DisplayFromAny>>, MappingWithEqualsNull)>"
     )]
-    pub(crate) environment: Option<IndexMap<String, Option<String>>>,
-    pub(crate) expose: Option<Vec<String>>,
-    pub(crate) external_links: Option<Vec<String>>,
+    pub(crate) environment: IndexMap<String, Option<String>>,
+    pub(crate) expose: Vec<String>,
+    pub(crate) external_links: Vec<String>,
     #[serde_as(
-        as = "Option<PickFirst<(_, IndexMap<DisplayFromAny, DisplayFromAny>, MappingWithColonEmpty)>>"
+        as = "PickFirst<(_, IndexMap<DisplayFromAny, DisplayFromAny>, MappingWithColonEmpty)>"
     )]
-    pub(crate) extra_hosts: Option<IndexMap<String, String>>,
-    pub(crate) group_add: Option<Vec<String>>,
+    pub(crate) extra_hosts: IndexMap<String, String>,
+    pub(crate) group_add: Vec<String>,
     pub(crate) healthcheck: Option<Healthcheck>,
     pub(crate) hostname: Option<String>,
     pub(crate) image: Option<String>,
     pub(crate) init: Option<bool>,
     pub(crate) ipc: Option<String>,
     #[serde_as(
-        as = "Option<PickFirst<(_, IndexMap<DisplayFromAny, DisplayFromAny>, MappingWithEqualsEmpty)>>"
+        as = "PickFirst<(_, IndexMap<DisplayFromAny, DisplayFromAny>, MappingWithEqualsEmpty)>"
     )]
-    pub(crate) labels: Option<IndexMap<String, String>>,
-    pub(crate) links: Option<Vec<String>>,
+    pub(crate) labels: IndexMap<String, String>,
+    pub(crate) links: Vec<String>,
     pub(crate) logging: Option<Logging>,
     pub(crate) mac_address: Option<String>,
     pub(crate) mem_limit: Option<Byte>,
@@ -138,6 +143,7 @@ pub(crate) struct Service {
     pub(crate) mem_swappiness: Option<i64>,
     pub(crate) memswap_limit: Option<SwapLimit>,
     #[serde_as(as = "PickFirst<(_, IndexMap<DisplayFromAny, _>, NetworksVec)>")]
+    #[serde_with(skip_apply)]
     #[serde(default = "default_service_networks")]
     pub(crate) networks: IndexMap<String, Option<ServiceNetwork>>,
     pub(crate) network_mode: Option<String>,
@@ -146,35 +152,35 @@ pub(crate) struct Service {
     pub(crate) pid: Option<String>,
     pub(crate) pids_limit: Option<i64>,
     pub(crate) platform: Option<String>,
-    #[serde_as(as = "Option<Vec<PickFirst<(_, PortOrString, PortOrU16)>>>")]
-    pub(crate) ports: Option<Vec<Port>>,
+    #[serde_as(as = "Vec<PickFirst<(_, PortOrString, PortOrU16)>>")]
+    pub(crate) ports: Vec<Port>,
     pub(crate) privileged: Option<bool>,
-    pub(crate) profiles: Option<Vec<String>>,
+    pub(crate) profiles: Vec<String>,
     pub(crate) pull_policy: Option<PullPolicy>,
     pub(crate) read_only: Option<bool>,
     pub(crate) restart: Option<RestartPolicy>,
     pub(crate) runtime: Option<String>,
-    #[serde_as(as = "Option<DuplicateInsertsLastWinsSet<PickFirst<(_, FileReferenceOrString)>>>")]
-    pub(crate) secrets: Option<IndexSet<FileReference>>,
-    pub(crate) security_opt: Option<Vec<String>>,
+    #[serde_as(as = "DuplicateInsertsLastWinsSet<PickFirst<(_, FileReferenceOrString)>>")]
+    pub(crate) secrets: IndexSet<FileReference>,
+    pub(crate) security_opt: Vec<String>,
     pub(crate) shm_size: Option<Byte>,
     #[serde_as(as = "Option<DurationWithSuffix>")]
     pub(crate) stop_grace_period: Option<Duration>,
     pub(crate) stop_signal: Option<String>,
-    pub(crate) storage_opt: Option<IndexMap<String, String>>,
+    pub(crate) storage_opt: IndexMap<String, String>,
     #[serde_as(
-        as = "Option<PickFirst<(_, IndexMap<DisplayFromAny, DisplayFromAny>, MappingWithEqualsNoNull)>>"
+        as = "PickFirst<(_, IndexMap<DisplayFromAny, DisplayFromAny>, MappingWithEqualsNoNull)>"
     )]
-    pub(crate) sysctls: Option<IndexMap<String, String>>,
-    #[serde_as(as = "Option<OneOrMany<_, PreferMany>>")]
-    pub(crate) tmpfs: Option<Vec<PathBuf>>,
+    pub(crate) sysctls: IndexMap<String, String>,
+    #[serde_as(as = "OneOrMany<_, PreferMany>")]
+    pub(crate) tmpfs: Vec<PathBuf>,
     pub(crate) tty: Option<bool>,
-    pub(crate) ulimits: Option<IndexMap<String, ResourceLimit>>,
+    pub(crate) ulimits: IndexMap<String, ResourceLimit>,
     pub(crate) user: Option<String>,
     pub(crate) userns_mode: Option<String>,
-    #[serde_as(as = "Option<DuplicateInsertsLastWinsSet<PickFirst<(_, ServiceVolumeOrString)>>>")]
-    pub(crate) volumes: Option<IndexSet<ServiceVolume>>,
-    pub(crate) volumes_from: Option<Vec<String>>,
+    #[serde_as(as = "DuplicateInsertsLastWinsSet<PickFirst<(_, ServiceVolumeOrString)>>")]
+    pub(crate) volumes: IndexSet<ServiceVolume>,
+    pub(crate) volumes_from: Vec<String>,
     pub(crate) working_dir: Option<PathBuf>,
 }
 
@@ -215,14 +221,17 @@ fn merge(base: &mut Value, other: Value) {
 }
 
 #[skip_serializing_none]
+#[serde_with::apply(
+    Vec => #[serde(skip_serializing_if = "Vec::is_empty", default)]
+)]
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct BlkioConfig {
     pub(crate) weight: Option<u16>,
-    pub(crate) weight_device: Option<Vec<WeightDevice>>,
-    pub(crate) device_read_bps: Option<Vec<ThrottleDevice>>,
-    pub(crate) device_write_bps: Option<Vec<ThrottleDevice>>,
-    pub(crate) device_read_iops: Option<Vec<ThrottleDevice>>,
-    pub(crate) device_write_iops: Option<Vec<ThrottleDevice>>,
+    pub(crate) weight_device: Vec<WeightDevice>,
+    pub(crate) device_read_bps: Vec<ThrottleDevice>,
+    pub(crate) device_write_bps: Vec<ThrottleDevice>,
+    pub(crate) device_read_iops: Vec<ThrottleDevice>,
+    pub(crate) device_write_iops: Vec<ThrottleDevice>,
 }
 
 #[serde_as]
@@ -243,6 +252,11 @@ pub(crate) struct ThrottleDevice {
 
 #[skip_serializing_none]
 #[serde_as]
+#[serde_with::apply(
+    IndexMap => #[serde(skip_serializing_if = "IndexMap::is_empty", default)],
+    IndexSet => #[serde(skip_serializing_if = "IndexSet::is_empty", default)],
+    Vec => #[serde(skip_serializing_if = "Vec::is_empty", default)]
+)]
 #[derive(Serialize, Deserialize, Default, Debug)]
 pub(crate) struct BuildConfig {
     #[serde_as(as = "PickFirst<(AbsPathBuf, DisplayFromAny)>")]
@@ -251,38 +265,38 @@ pub(crate) struct BuildConfig {
     #[serde(default = "default_dockerfile")]
     pub(crate) dockerfile: PathBuf,
     #[serde_as(
-        as = "Option<PickFirst<(_, IndexMap<DisplayFromAny, Option<DisplayFromAny>>, MappingWithEqualsNull)>>"
+        as = "PickFirst<(_, IndexMap<DisplayFromAny, Option<DisplayFromAny>>, MappingWithEqualsNull)>"
     )]
-    pub(crate) args: Option<IndexMap<String, Option<String>>>,
+    pub(crate) args: IndexMap<String, Option<String>>,
     #[serde_as(
-        as = "Option<PickFirst<(MappingWithEqualsNullSerialiseAsColon, _, IndexMap<DisplayFromAny, Option<DisplayFromAny>>)>>"
+        as = "PickFirst<(MappingWithEqualsNullSerialiseAsColon, _, IndexMap<DisplayFromAny, Option<DisplayFromAny>>)>"
     )]
-    pub(crate) ssh: Option<IndexMap<String, Option<String>>>,
-    #[serde_as(as = "Option<Vec<DisplayFromAny>>")]
-    pub(crate) cache_from: Option<Vec<String>>,
-    #[serde_as(as = "Option<Vec<DisplayFromAny>>")]
-    pub(crate) cache_to: Option<Vec<String>>,
+    pub(crate) ssh: IndexMap<String, Option<String>>,
+    #[serde_as(as = "Vec<DisplayFromAny>")]
+    pub(crate) cache_from: Vec<String>,
+    #[serde_as(as = "Vec<DisplayFromAny>")]
+    pub(crate) cache_to: Vec<String>,
     #[serde_as(
-        as = "Option<PickFirst<(_, IndexMap<DisplayFromAny, DisplayFromAny>, MappingWithColonEmpty)>>"
+        as = "PickFirst<(_, IndexMap<DisplayFromAny, DisplayFromAny>, MappingWithColonEmpty)>"
     )]
-    pub(crate) extra_hosts: Option<IndexMap<String, String>>,
+    pub(crate) extra_hosts: IndexMap<String, String>,
     #[serde_as(as = "Option<DisplayFromAny>")]
     pub(crate) isolation: Option<String>,
     #[serde_as(
-        as = "Option<PickFirst<(_, IndexMap<DisplayFromAny, DisplayFromAny>, MappingWithEqualsEmpty)>>"
+        as = "PickFirst<(_, IndexMap<DisplayFromAny, DisplayFromAny>, MappingWithEqualsEmpty)>"
     )]
-    pub(crate) labels: Option<IndexMap<String, String>>,
+    pub(crate) labels: IndexMap<String, String>,
     pub(crate) no_cache: Option<bool>,
     pub(crate) pull: Option<bool>,
     pub(crate) shm_size: Option<Byte>,
     #[serde_as(as = "Option<DisplayFromAny>")]
     pub(crate) target: Option<String>,
-    #[serde_as(as = "Option<DuplicateInsertsLastWinsSet<PickFirst<(_, FileReferenceOrString)>>>")]
-    pub(crate) secrets: Option<IndexSet<FileReference>>,
-    #[serde_as(as = "Option<Vec<DisplayFromAny>>")]
-    pub(crate) tags: Option<Vec<String>>,
-    #[serde_as(as = "Option<Vec<DisplayFromAny>>")]
-    pub(crate) platforms: Option<Vec<String>>,
+    #[serde_as(as = "DuplicateInsertsLastWinsSet<PickFirst<(_, FileReferenceOrString)>>")]
+    pub(crate) secrets: IndexSet<FileReference>,
+    #[serde_as(as = "Vec<DisplayFromAny>")]
+    pub(crate) tags: Vec<String>,
+    #[serde_as(as = "Vec<DisplayFromAny>")]
+    pub(crate) platforms: Vec<String>,
 }
 
 fn default_dockerfile() -> PathBuf {
@@ -383,10 +397,13 @@ impl Hash for Device {
 
 #[skip_serializing_none]
 #[serde_as]
+#[serde_with::apply(
+    Vec => #[serde(skip_serializing_if = "Vec::is_empty", default)]
+)]
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct Healthcheck {
-    #[serde_as(as = "Option<PickFirst<(_, StringWithSeparator::<SpaceSeparator, String>)>>")]
-    pub(crate) test: Option<Vec<String>>,
+    #[serde_as(as = "PickFirst<(_, StringWithSeparator::<SpaceSeparator, String>)>")]
+    pub(crate) test: Vec<String>,
     #[serde_as(as = "Option<DurationWithSuffix>")]
     pub(crate) interval: Option<Duration>,
     #[serde_as(as = "Option<DurationWithSuffix>")]
@@ -398,10 +415,13 @@ pub(crate) struct Healthcheck {
 }
 
 #[skip_serializing_none]
+#[serde_with::apply(
+    IndexMap => #[serde(skip_serializing_if = "IndexMap::is_empty", default)]
+)]
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct Logging {
     pub(crate) driver: Option<String>,
-    pub(crate) options: Option<IndexMap<String, String>>,
+    pub(crate) options: IndexMap<String, String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -413,16 +433,19 @@ pub(crate) enum SwapLimit {
 
 #[skip_serializing_none]
 #[serde_as]
+#[serde_with::apply(
+    Vec => #[serde(skip_serializing_if = "Vec::is_empty", default)]
+)]
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct ServiceNetwork {
-    #[serde_as(as = "Option<Vec<DisplayFromAny>>")]
-    pub(crate) aliases: Option<Vec<String>>,
+    #[serde_as(as = "Vec<DisplayFromAny>")]
+    pub(crate) aliases: Vec<String>,
     #[serde_as(as = "Option<DisplayFromAny>")]
     pub(crate) ipv4_address: Option<String>,
     #[serde_as(as = "Option<DisplayFromAny>")]
     pub(crate) ipv6_address: Option<String>,
-    #[serde_as(as = "Option<Vec<DisplayFromAny>>")]
-    pub(crate) link_local_ips: Option<Vec<String>>,
+    #[serde_as(as = "Vec<DisplayFromAny>")]
+    pub(crate) link_local_ips: Vec<String>,
     pub(crate) priority: Option<i32>,
 }
 
@@ -537,26 +560,32 @@ pub(crate) struct ServiceVolumeTmpfs {
 
 #[skip_serializing_none]
 #[serde_as]
+#[serde_with::apply(
+    IndexMap => #[serde(skip_serializing_if = "IndexMap::is_empty", default)]
+)]
 #[derive(Serialize, Deserialize, Default, Debug)]
 pub(crate) struct Network {
     pub(crate) name: Option<String>,
     pub(crate) driver: Option<String>,
-    pub(crate) driver_opts: Option<IndexMap<String, String>>,
+    pub(crate) driver_opts: IndexMap<String, String>,
     pub(crate) enable_ipv6: Option<bool>,
     pub(crate) ipam: Option<IpamConfig>,
     pub(crate) internal: Option<bool>,
     #[serde_as(
-        as = "Option<PickFirst<(_, IndexMap<DisplayFromAny, DisplayFromAny>, MappingWithEqualsEmpty)>>"
+        as = "PickFirst<(_, IndexMap<DisplayFromAny, DisplayFromAny>, MappingWithEqualsEmpty)>"
     )]
-    pub(crate) labels: Option<IndexMap<String, String>>,
+    pub(crate) labels: IndexMap<String, String>,
     pub(crate) external: Option<bool>,
 }
 
 #[skip_serializing_none]
+#[serde_with::apply(
+    Vec => #[serde(skip_serializing_if = "Vec::is_empty", default)]
+)]
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct IpamConfig {
     pub(crate) driver: Option<String>,
-    pub(crate) config: Option<Vec<IpamPool>>,
+    pub(crate) config: Vec<IpamPool>,
 }
 
 #[skip_serializing_none]
@@ -569,16 +598,19 @@ pub(crate) struct IpamPool {
 
 #[skip_serializing_none]
 #[serde_as]
+#[serde_with::apply(
+    IndexMap => #[serde(skip_serializing_if = "IndexMap::is_empty", default)]
+)]
 #[derive(Serialize, Deserialize, Default, Debug)]
 pub(crate) struct Volume {
     pub(crate) name: Option<String>,
     pub(crate) driver: Option<String>,
-    pub(crate) driver_opts: Option<IndexMap<String, String>>,
+    pub(crate) driver_opts: IndexMap<String, String>,
     pub(crate) external: Option<bool>,
     #[serde_as(
-        as = "Option<PickFirst<(_, IndexMap<DisplayFromAny, DisplayFromAny>, MappingWithEqualsEmpty)>>"
+        as = "PickFirst<(_, IndexMap<DisplayFromAny, DisplayFromAny>, MappingWithEqualsEmpty)>"
     )]
-    pub(crate) labels: Option<IndexMap<String, String>>,
+    pub(crate) labels: IndexMap<String, String>,
 }
 
 #[skip_serializing_none]
