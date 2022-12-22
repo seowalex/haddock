@@ -10,7 +10,7 @@ use path_absolutize::Absolutize;
 
 use crate::{compose, config::Config};
 
-/// Converts the compose file to platform's canonical format
+/// Converts the Compose file to platform's canonical format
 #[derive(clap::Args, Debug)]
 #[command(alias = "config", next_display_order = None)]
 pub(crate) struct Args {
@@ -54,7 +54,7 @@ enum Format {
 }
 
 pub(crate) fn run(args: Args, config: Config) -> Result<()> {
-    let file = compose::parse(config, args.no_interpolate)?;
+    let file = compose::parse(&config, args.no_interpolate)?;
 
     if !args.quiet {
         if args.services {

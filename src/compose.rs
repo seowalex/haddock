@@ -101,10 +101,10 @@ fn interpolate(value: &Value) -> Result<Value> {
     }
 }
 
-pub(crate) fn parse(config: Config, no_interpolate: bool) -> Result<Compose> {
+pub(crate) fn parse(config: &Config, no_interpolate: bool) -> Result<Compose> {
     let contents = config
         .files
-        .into_iter()
+        .iter()
         .map(|path| {
             if path.as_os_str() == "-" {
                 let mut content = String::new();
@@ -114,7 +114,7 @@ pub(crate) fn parse(config: Config, no_interpolate: bool) -> Result<Compose> {
 
                 Ok((path, content))
             } else {
-                fs::read_to_string(&path)
+                fs::read_to_string(path)
                     .with_context(|| format!("{} not found", path.display()))
                     .map(|content| (path, content))
             }
@@ -457,9 +457,9 @@ mod tests {
         ]
         .contains(&resource)
         {
-            assert_err!(super::parse(config, false));
+            assert_err!(super::parse(&config, false));
         } else {
-            assert_ok!(super::parse(config, false));
+            assert_ok!(super::parse(&config, false));
         }
     }
 

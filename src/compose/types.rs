@@ -983,11 +983,11 @@ serde_conv!(
                 }
                 "shared" | "rshared" | "slave" | "rslave" | "private" | "rprivate"
                 | "unbindable" | "runbindable" => {
-                    bind.get_or_insert(ServiceVolumeBind::default()).propagation =
-                        Some(option.to_string());
+                    bind.get_or_insert_with(ServiceVolumeBind::default)
+                        .propagation = Some(option.to_string());
                 }
                 "z" | "Z" => {
-                    bind.get_or_insert(ServiceVolumeBind::default()).selinux =
+                    bind.get_or_insert_with(ServiceVolumeBind::default).selinux =
                         Some(option.to_string());
                 }
                 "copy" | "nocopy" => {
