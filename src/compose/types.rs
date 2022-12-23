@@ -17,6 +17,7 @@ use serde_with::{
     DurationMicroSeconds, OneOrMany, PickFirst, StringWithSeparator,
 };
 use serde_yaml::Value;
+use sha2::{Digest, Sha256};
 use yansi::Paint;
 
 use crate::utils::{DisplayFromAny, DuplicateInsertsLastWinsSet};
@@ -44,6 +45,13 @@ pub(crate) struct Compose {
 impl Compose {
     pub(crate) fn new() -> Self {
         Self::default()
+    }
+
+    pub(crate) fn digest(&self) -> String {
+        format!(
+            "{:x}",
+            Sha256::digest(serde_yaml::to_string(self).unwrap().as_bytes())
+        )
     }
 
     pub(crate) fn merge(&mut self, other: Self) {
@@ -135,7 +143,8 @@ pub(crate) struct Service {
         as = "PickFirst<(_, IndexMap<DisplayFromAny, DisplayFromAny>, MappingWithEqualsEmpty)>"
     )]
     pub(crate) labels: IndexMap<String, String>,
-    pub(crate) links: Vec<String>,
+    #[serde_as(as = "LinksVec")]
+    pub(crate) links: IndexMap<String, Option<String>>,
     pub(crate) logging: Option<Logging>,
     pub(crate) mac_address: Option<String>,
     pub(crate) mem_limit: Option<Byte>,
@@ -160,9 +169,11 @@ pub(crate) struct Service {
     pub(crate) read_only: Option<bool>,
     pub(crate) restart: Option<RestartPolicy>,
     pub(crate) runtime: Option<String>,
+    pub(crate) scale: Option<i32>,
     #[serde_as(as = "DuplicateInsertsLastWinsSet<PickFirst<(_, FileReferenceOrString)>>")]
     pub(crate) secrets: IndexSet<FileReference>,
-    pub(crate) security_opt: Vec<String>,
+    #[serde_as(as = "SecurityOptVec")]
+    pub(crate) security_opt: Vec<(String, Option<String>)>,
     pub(crate) shm_size: Option<Byte>,
     #[serde_as(as = "Option<DurationWithSuffix>")]
     pub(crate) stop_grace_period: Option<Duration>,
@@ -338,7 +349,7 @@ pub(crate) struct Dependency {
     pub(crate) condition: Condition,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug)]
 pub(crate) enum Condition {
     #[serde(rename = "service_started")]
     Started,
@@ -351,6 +362,7 @@ pub(crate) enum Condition {
 #[skip_serializing_none]
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct DeployConfig {
+    pub(crate) replicas: Option<i32>,
     pub(crate) resources: Option<Resources>,
 }
 
@@ -637,7 +649,7 @@ pub(crate) struct Secret {
 serde_conv!(
     AbsPathBuf,
     PathBuf,
-    |path: &PathBuf| { path.to_string_lossy().to_string() },
+    |path: &PathBuf| path.to_string_lossy().to_string(),
     |path: String| -> Result<_> {
         Path::new(&path)
             .absolutize()
@@ -649,7 +661,7 @@ serde_conv!(
 serde_conv!(
     BuildConfigOrPathBuf,
     BuildConfig,
-    |build: &BuildConfig| { build.context.clone() },
+    |build: &BuildConfig| build.context.clone(),
     |context: PathBuf| -> Result<_> {
         context
             .absolutize()
@@ -665,18 +677,21 @@ serde_conv!(
 serde_conv!(
     DependsOnVec,
     IndexMap<String, Dependency>,
-    |dependencies: &IndexMap<String, Dependency>| dependencies.keys().cloned().collect::<Vec<_>>(),
-    |dependencies: Vec<String>| -> std::result::Result<_, Infallible> {
-        Ok(dependencies.into_iter().map(
-            |dependency| {
+    |dependencies: &IndexMap<String, Dependency>| {
+        dependencies.keys().cloned().collect::<Vec<_>>()
+    },
+    |dependencies: Vec<String>| -> Result<_, Infallible> {
+        Ok(dependencies
+            .into_iter()
+            .map(|dependency| {
                 (
                     dependency,
                     Dependency {
                         condition: Condition::Started,
                     },
                 )
-            },
-        ).collect::<IndexMap<_, _>>())
+            })
+            .collect::<IndexMap<_, _>>())
     }
 );
 
@@ -723,12 +738,41 @@ serde_conv!(
 serde_conv!(
     FileReferenceOrString,
     FileReference,
-    |file_reference: &FileReference| { file_reference.source.clone() },
-    |source| -> std::result::Result<_, Infallible> {
+    |file_reference: &FileReference| file_reference.source.clone(),
+    |source| -> Result<_, Infallible> {
         Ok(FileReference {
             source,
             ..Default::default()
         })
+    }
+);
+
+serde_conv!(
+    LinksVec,
+    IndexMap<String, Option<String>>,
+    |links: &IndexMap<String, Option<String>>| {
+        links
+            .into_iter()
+            .map(|(service, alias)| {
+                if let Some(alias) = alias {
+                    format!("{service}:{alias}")
+                } else {
+                    service.clone()
+                }
+            })
+            .collect::<Vec<_>>()
+    },
+    |links: Vec<String>| -> Result<_, Infallible> {
+        Ok(links
+            .into_iter()
+            .map(|link| {
+                let mut parts = link.split(':');
+                (
+                    parts.next().unwrap().to_string(),
+                    parts.next().map(ToString::to_string),
+                )
+            })
+            .collect::<IndexMap<_, _>>())
     }
 );
 
@@ -747,14 +791,17 @@ serde_conv!(
             })
             .collect::<Vec<_>>()
     },
-    |variables: Vec<String>| -> std::result::Result<_, Infallible> {
-        Ok(variables.into_iter().map(|variable| {
-            let mut parts = variable.split(':');
-            (
-                parts.next().unwrap().to_string(),
-                parts.next().map(ToString::to_string).unwrap_or_default(),
-            )
-        }).collect::<IndexMap<_, _>>())
+    |variables: Vec<String>| -> Result<_, Infallible> {
+        Ok(variables
+            .into_iter()
+            .map(|variable| {
+                let mut parts = variable.split(':');
+                (
+                    parts.next().unwrap().to_string(),
+                    parts.next().map(ToString::to_string).unwrap_or_default(),
+                )
+            })
+            .collect::<IndexMap<_, _>>())
     }
 );
 
@@ -770,14 +817,17 @@ serde_conv!(
             })
             .collect::<Vec<_>>()
     },
-    |variables: Vec<String>| -> std::result::Result<_, Infallible> {
-        Ok(variables.into_iter().map(|variable| {
-            let mut parts = variable.split('=');
-            (
-                parts.next().unwrap().to_string(),
-                parts.next().map(ToString::to_string),
-            )
-        }).collect::<IndexMap<_, _>>())
+    |variables: Vec<String>| -> Result<_, Infallible> {
+        Ok(variables
+            .into_iter()
+            .map(|variable| {
+                let mut parts = variable.split('=');
+                (
+                    parts.next().unwrap().to_string(),
+                    parts.next().map(ToString::to_string),
+                )
+            })
+            .collect::<IndexMap<_, _>>())
     }
 );
 
@@ -796,14 +846,17 @@ serde_conv!(
             })
             .collect::<Vec<_>>()
     },
-    |variables: Vec<String>| -> std::result::Result<_, Infallible> {
-        Ok(variables.into_iter().map(|variable| {
-            let mut parts = variable.split('=');
-            (
-                parts.next().unwrap().to_string(),
-                parts.next().map(ToString::to_string).unwrap_or_default(),
-            )
-        }).collect::<IndexMap<_, _>>())
+    |variables: Vec<String>| -> Result<_, Infallible> {
+        Ok(variables
+            .into_iter()
+            .map(|variable| {
+                let mut parts = variable.split('=');
+                (
+                    parts.next().unwrap().to_string(),
+                    parts.next().map(ToString::to_string).unwrap_or_default(),
+                )
+            })
+            .collect::<IndexMap<_, _>>())
     }
 );
 
@@ -817,13 +870,19 @@ serde_conv!(
             .collect::<Vec<_>>()
     },
     |variables: Vec<String>| -> Result<_> {
-        let variables = variables.into_iter().map(|variable| -> Result<_> {
-            let mut parts = variable.split('=');
-            let key = parts.next().unwrap().to_string();
-            let value = parts.next().map(ToString::to_string).ok_or_else(|| anyhow!("{key}: value not defined"))?;
+        let variables = variables
+            .into_iter()
+            .map(|variable| -> Result<_> {
+                let mut parts = variable.split('=');
+                let key = parts.next().unwrap().to_string();
+                let value = parts
+                    .next()
+                    .map(ToString::to_string)
+                    .ok_or_else(|| anyhow!("{key}: value not defined"))?;
 
-            Ok((key, value))
-        }).collect::<Result<Vec<_>, _>>()?;
+                Ok((key, value))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
 
         Ok(variables.into_iter().collect::<IndexMap<_, _>>())
     }
@@ -841,23 +900,31 @@ serde_conv!(
             })
             .collect::<Vec<_>>()
     },
-    |variables: Vec<String>| -> std::result::Result<_, Infallible> {
-        Ok(variables.into_iter().map(|variable| {
-            let mut parts = variable.split('=');
-            (
-                parts.next().unwrap().to_string(),
-                parts.next().map(ToString::to_string),
-            )
-        }).collect::<IndexMap<_, _>>())
+    |variables: Vec<String>| -> Result<_, Infallible> {
+        Ok(variables
+            .into_iter()
+            .map(|variable| {
+                let mut parts = variable.split('=');
+                (
+                    parts.next().unwrap().to_string(),
+                    parts.next().map(ToString::to_string),
+                )
+            })
+            .collect::<IndexMap<_, _>>())
     }
 );
 
 serde_conv!(
     NetworksVec,
     IndexMap<String, Option<ServiceNetwork>>,
-    |networks: &IndexMap<String, Option<ServiceNetwork>>| networks.keys().cloned().collect::<Vec<_>>(),
-    |networks: Vec<String>| -> std::result::Result<_, Infallible> {
-        Ok(networks.into_iter().map(|network| (network, None)).collect::<IndexMap<_, _>>())
+    |networks: &IndexMap<String, Option<ServiceNetwork>>| {
+        networks.keys().cloned().collect::<Vec<_>>()
+    },
+    |networks: Vec<String>| -> Result<_, Infallible> {
+        Ok(networks
+            .into_iter()
+            .map(|network| (network, None))
+            .collect::<IndexMap<_, _>>())
     }
 );
 
@@ -884,7 +951,7 @@ serde_conv!(
 
         string
     },
-    |port: String| -> std::result::Result<_, Infallible> {
+    |port: String| -> Result<_, Infallible> {
         let mut parts = port.split(':').rev();
         let container_port = parts.next().unwrap();
         let mut container_parts = container_port.split('/');
@@ -911,12 +978,44 @@ serde_conv!(
     PortOrU16,
     Port,
     |port: &Port| port.target.parse::<u16>().unwrap(),
-    |target: u16| -> std::result::Result<_, Infallible> {
+    |target: u16| -> Result<_, Infallible> {
         Ok(Port {
             target: target.to_string(),
             protocol: String::from("tcp"),
             ..Default::default()
         })
+    }
+);
+
+serde_conv!(
+    SecurityOptVec,
+    Vec<(String, Option<String>)>,
+    |security_opts: &Vec<(String, Option<String>)>| {
+        security_opts
+            .iter()
+            .map(|(key, value)| {
+                if let Some(value) = value {
+                    format!("{key}:{value}")
+                } else {
+                    key.clone()
+                }
+            })
+            .collect::<Vec<_>>()
+    },
+    |security_opts: Vec<String>| -> Result<_, Infallible> {
+        Ok(security_opts
+            .into_iter()
+            .map(|security_opt| {
+                if let Some(idx) = security_opt.find(':') {
+                    (
+                        security_opt[..idx].to_string(),
+                        Some(security_opt[idx + 1..].to_string()),
+                    )
+                } else {
+                    (security_opt, None)
+                }
+            })
+            .collect::<Vec<_>>())
     }
 );
 

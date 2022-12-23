@@ -85,9 +85,9 @@ services:
       com.example.department: 'Finance'
       com.example.label-with-empty-value: ''
     links:
-      - db
-      - db:database
-      - redis
+      - bar
+      - bar:database
+      - baz
     logging:
       driver: syslog
       options:
@@ -110,6 +110,7 @@ services:
     security_opt:
       - label:user:USER
       - label:role:ROLE
+      - no-new-privileges
     sysctls:
       net.core.somaxconn: 1024
       net.ipv4.tcp_syncookies: 0

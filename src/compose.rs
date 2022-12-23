@@ -1,5 +1,5 @@
 mod parser;
-mod types;
+pub(crate) mod types;
 
 use std::{
     env, fs,
@@ -7,7 +7,6 @@ use std::{
 };
 
 use anyhow::{anyhow, bail, Context, Error, Result};
-use clap::crate_name;
 use indexmap::IndexSet;
 use itertools::Itertools;
 use path_absolutize::Absolutize;
@@ -159,7 +158,7 @@ pub(crate) fn parse(config: &Config, no_interpolate: bool) -> Result<Compose> {
                                                 name.file_name()
                                                     .map(|name| name.to_string_lossy().to_string())
                                             })
-                                            .unwrap_or_else(|| crate_name!().to_string()),
+                                            .unwrap_or_default(),
                                         "",
                                     )
                                     .to_ascii_lowercase();
@@ -348,7 +347,7 @@ pub(crate) fn parse(config: &Config, no_interpolate: bool) -> Result<Compose> {
             bail!("Service \"{name}\" cannot have port mappings due to host network mode");
         }
 
-        for dependency in service.depends_on.keys() {
+        for dependency in service.depends_on.keys().chain(service.links.keys()) {
             if !combined_file.services.contains_key(dependency) {
                 bail!("Service \"{name}\" depends on undefined service \"{dependency}\"");
             }
