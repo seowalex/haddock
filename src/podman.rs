@@ -1,3 +1,5 @@
+pub(crate) mod types;
+
 use std::{
     ffi::OsStr,
     path::{Path, PathBuf},
@@ -7,10 +9,11 @@ use std::{
 use anyhow::{anyhow, bail, Context, Result};
 use itertools::Itertools;
 use once_cell::sync::Lazy;
-use semver::Version;
-use serde_json::Value;
 
-static PODMAN_MIN_SUPPORTED_VERSION: Lazy<Version> = Lazy::new(|| Version::new(4, 3, 0));
+use self::types::Version;
+
+static PODMAN_MIN_SUPPORTED_VERSION: Lazy<semver::Version> =
+    Lazy::new(|| semver::Version::new(4, 3, 0));
 
 #[derive(Debug)]
 pub(crate) struct Podman {
@@ -36,12 +39,10 @@ impl Podman {
             })?
             .stdout;
         let data = String::from_utf8_lossy(&output);
-        let value = serde_json::from_str::<Value>(&data)?;
-        let version_str = value["Client"]["Version"]
-            .as_str()
-            .ok_or_else(|| anyhow!("Podman version not found"))?;
-        let version = Version::parse(version_str)
-            .with_context(|| anyhow!("Podman version \"{version_str}\" not recognised"))?;
+        let version = serde_json::from_str::<Version>(&data)
+            .with_context(|| anyhow!("Podman version not recognised"))?
+            .client
+            .version;
 
         if version < *PODMAN_MIN_SUPPORTED_VERSION {
             bail!(
@@ -53,5 +54,36 @@ impl Podman {
         Ok(Podman {
             project_directory: project_directory.to_path_buf(),
         })
+    }
+
+    pub(crate) fn run<I, S>(&self, args: I) -> Command
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>,
+    {
+        let mut command = Command::new("podman");
+        command.current_dir(&self.project_directory).args(args);
+
+        command
+    }
+
+    pub(crate) fn output<I, S>(&self, args: I) -> Result<String>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>,
+    {
+        let mut command = self.run(args);
+        let output = command
+            .output()
+            .with_context(|| {
+                anyhow!(
+                    "`{} {}` cannot be executed",
+                    command.get_program().to_string_lossy(),
+                    command.get_args().map(OsStr::to_string_lossy).join(" ")
+                )
+            })?
+            .stdout;
+
+        Ok(String::from_utf8_lossy(&output).to_string())
     }
 }

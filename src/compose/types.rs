@@ -1,5 +1,6 @@
 use std::{
     convert::Infallible,
+    fmt::{self, Debug, Display, Formatter},
     hash::{Hash, Hasher},
     path::{Path, PathBuf},
     time::Duration,
@@ -208,6 +209,350 @@ impl Service {
 
         *self = serde_yaml::from_value(value).unwrap();
     }
+
+    pub(crate) fn as_args(&self) -> Vec<String> {
+        let mut args = Vec::new();
+
+        if let Some(blkio_config) = &self.blkio_config {
+            if let Some(weight) = blkio_config.weight {
+                args.extend([String::from("--blkio-weight"), weight.to_string()]);
+            }
+
+            for weight_device in &blkio_config.weight_device {
+                args.extend([
+                    String::from("--blkio-weight-device"),
+                    weight_device.to_string(),
+                ]);
+            }
+
+            for device_read_bps in &blkio_config.device_read_bps {
+                args.extend([
+                    String::from("--device-read-bps"),
+                    device_read_bps.to_string(),
+                ]);
+            }
+
+            for device_write_bps in &blkio_config.device_write_bps {
+                args.extend([
+                    String::from("--device-write-bps"),
+                    device_write_bps.to_string(),
+                ]);
+            }
+
+            for device_read_iops in &blkio_config.device_read_iops {
+                args.extend([
+                    String::from("--device-read-iops"),
+                    device_read_iops.to_string(),
+                ]);
+            }
+
+            for device_write_iops in &blkio_config.device_write_iops {
+                args.extend([
+                    String::from("--device-write-iops"),
+                    device_write_iops.to_string(),
+                ]);
+            }
+        }
+
+        for cap_add in self.cap_add.iter().cloned() {
+            args.extend([String::from("--cap-add"), cap_add]);
+        }
+
+        for cap_drop in self.cap_drop.iter().cloned() {
+            args.extend([String::from("--cap-drop"), cap_drop]);
+        }
+
+        if let Some(cgroup_parent) = self.cgroup_parent.as_ref().cloned() {
+            args.extend([String::from("--cgroup-parent"), cgroup_parent]);
+        }
+
+        if let Some(container_name) = self.container_name.as_ref().cloned() {
+            args.extend([String::from("--name"), container_name]);
+        }
+
+        if let Some(cpu_period) = self.cpu_period {
+            args.extend([
+                String::from("--cpu-period"),
+                cpu_period.as_micros().to_string(),
+            ]);
+        }
+
+        if let Some(cpu_quota) = self.cpu_quota {
+            args.extend([
+                String::from("--cpu-quota"),
+                cpu_quota.as_micros().to_string(),
+            ]);
+        }
+
+        if let Some(cpu_rt_period) = self.cpu_rt_period {
+            args.extend([
+                String::from("--cpu-rt-period"),
+                cpu_rt_period.as_micros().to_string(),
+            ]);
+        }
+
+        if let Some(cpu_rt_runtime) = self.cpu_rt_runtime {
+            args.extend([
+                String::from("--cpu-rt-runtime"),
+                cpu_rt_runtime.as_micros().to_string(),
+            ]);
+        }
+
+        if let Some(cpu_shares) = self.cpu_shares {
+            args.extend([String::from("--cpu-shares"), cpu_shares.to_string()]);
+        }
+
+        if let Some(cpuset) = self.cpuset.as_ref().cloned() {
+            args.extend([String::from("--cpuset-cpus"), cpuset]);
+        }
+
+        for device_cgroup_rule in self.device_cgroup_rules.iter().cloned() {
+            args.extend([String::from("--device-cgroup-rule"), device_cgroup_rule]);
+        }
+
+        for device in &self.devices {
+            args.extend([String::from("--device"), device.to_string()]);
+        }
+
+        for dns in self.dns.iter().cloned() {
+            args.extend([String::from("--dns"), dns]);
+        }
+
+        for dns_opt in self.dns_opt.iter().cloned() {
+            args.extend([String::from("--dns-option"), dns_opt]);
+        }
+
+        for dns_search in self.dns_search.iter().cloned() {
+            args.extend([String::from("--dns-search"), dns_search]);
+        }
+
+        if !self.entrypoint.is_empty() {
+            args.extend([String::from("--entrypoint"), self.entrypoint.join(" ")]);
+        }
+
+        for env_file in &self.env_file {
+            args.extend([
+                String::from("--env-file"),
+                env_file.to_string_lossy().to_string(),
+            ]);
+        }
+
+        for (key, value) in &self.environment {
+            args.extend([
+                String::from("--env"),
+                if let Some(value) = value {
+                    format!("{key}={value}")
+                } else {
+                    key.clone()
+                },
+            ]);
+        }
+
+        for expose in self.expose.iter().cloned() {
+            args.extend([String::from("--expose"), expose]);
+        }
+
+        for (host, ip) in &self.extra_hosts {
+            args.extend([String::from("--add-host"), format!("{host}:{ip}")]);
+        }
+
+        for group_add in self.group_add.iter().cloned() {
+            args.extend([String::from("--group-add"), group_add]);
+        }
+
+        if let Some(healthcheck) = &self.healthcheck {
+            args.extend([String::from("--health-cmd"), healthcheck.test.join(" ")]);
+
+            if let Some(interval) = healthcheck.interval {
+                args.extend([
+                    String::from("--health-interval"),
+                    interval.as_secs().to_string(),
+                ]);
+            }
+
+            if let Some(timeout) = healthcheck.timeout {
+                args.extend([
+                    String::from("--health-timeout"),
+                    timeout.as_secs().to_string(),
+                ]);
+            }
+
+            if let Some(start_period) = healthcheck.start_period {
+                args.extend([
+                    String::from("--health-start-period"),
+                    start_period.as_secs().to_string(),
+                ]);
+            }
+
+            if let Some(retries) = healthcheck.retries {
+                args.extend([String::from("--health-retries"), retries.to_string()]);
+            }
+
+            if healthcheck.disable.unwrap_or_default() {
+                args.push(String::from("--no-healthcheck"));
+            }
+        }
+
+        if let Some(hostname) = self.hostname.as_ref().cloned() {
+            args.extend([String::from("--hostname"), hostname]);
+        }
+
+        if self.init.unwrap_or_default() {
+            args.push(String::from("--init"));
+        }
+
+        if let Some(ipc) = self.ipc.as_ref().cloned() {
+            args.extend([String::from("--ipc"), ipc]);
+        }
+
+        for (key, value) in &self.labels {
+            args.extend([String::from("--label"), format!("{key}={value}")]);
+        }
+
+        if let Some(logging) = &self.logging {
+            if let Some(driver) = logging.driver.as_ref().cloned() {
+                args.extend([String::from("--log-driver"), driver]);
+            }
+
+            for (key, value) in &logging.options {
+                args.extend([String::from("--log-opt"), format!("{key}={value}")]);
+            }
+        }
+
+        if let Some(mac_address) = self.mac_address.as_ref().cloned() {
+            args.extend([String::from("--mac-address"), mac_address]);
+        }
+
+        if let Some(mem_swappiness) = self.mem_swappiness {
+            args.extend([
+                String::from("--memory-swappiness"),
+                mem_swappiness.to_string(),
+            ]);
+        }
+
+        if let Some(memswap_limit) = &self.memswap_limit {
+            args.extend([String::from("--memory-swap"), memswap_limit.to_string()]);
+        }
+
+        for network in self.networks.keys().cloned() {
+            args.extend([String::from("--network"), network]);
+        }
+
+        if let Some(network_mode) = self.network_mode.as_ref().cloned() {
+            args.extend([String::from("--network"), network_mode]);
+        }
+
+        if self.oom_kill_disable.unwrap_or_default() {
+            args.push(String::from("--oom-kill-disable"));
+        }
+
+        if let Some(oom_score_adj) = self.oom_score_adj {
+            args.extend([String::from("--oom-score-adj"), oom_score_adj.to_string()]);
+        }
+
+        if let Some(pid) = self.pid.as_ref().cloned() {
+            args.extend([String::from("--pid"), pid]);
+        }
+
+        if let Some(platform) = self.platform.as_ref().cloned() {
+            args.extend([String::from("--platform"), platform]);
+        }
+
+        for port in &self.ports {
+            args.extend([String::from("--publish"), port.to_string()]);
+        }
+
+        if self.privileged.unwrap_or_default() {
+            args.push(String::from("--privileged"));
+        }
+
+        if let Some(pull_policy) = &self.pull_policy {
+            args.extend([String::from("--pull"), pull_policy.to_string()]);
+        }
+
+        if self.read_only.unwrap_or_default() {
+            args.push(String::from("--read-only"));
+        }
+
+        if let Some(restart) = &self.restart {
+            args.extend([String::from("--restart"), restart.to_string()]);
+        }
+
+        for secret in &self.secrets {
+            args.extend([String::from("--secret"), secret.to_string()]);
+        }
+
+        for (key, value) in &self.security_opt {
+            args.extend([
+                String::from("--security-opt"),
+                if let Some(value) = value {
+                    format!("{key}={value}")
+                } else {
+                    key.clone()
+                },
+            ]);
+        }
+
+        if let Some(shm_size) = self.shm_size {
+            args.extend([String::from("--shm-size"), shm_size.to_string()]);
+        }
+
+        if let Some(stop_grace_period) = self.stop_grace_period {
+            args.extend([
+                String::from("--stop-grace-period"),
+                stop_grace_period.as_secs().to_string(),
+            ]);
+        }
+
+        if let Some(stop_signal) = self.stop_signal.as_ref().cloned() {
+            args.extend([String::from("--stop-signal"), stop_signal]);
+        }
+
+        for (key, value) in &self.sysctls {
+            args.extend([String::from("--sysctl"), format!("{key}={value}")]);
+        }
+
+        for tmpfs in &self.tmpfs {
+            args.extend([String::from("--tmpfs"), tmpfs.to_string_lossy().to_string()]);
+        }
+
+        if self.tty.unwrap_or_default() {
+            args.push(String::from("--tty"));
+        }
+
+        for (key, value) in &self.ulimits {
+            args.extend([String::from("--ulimit"), format!("{key}={value}")]);
+        }
+
+        if let Some(user) = self.user.as_ref().cloned() {
+            args.extend([String::from("--user"), user]);
+        }
+
+        if let Some(userns_mode) = self.userns_mode.as_ref().cloned() {
+            args.extend([String::from("--userns"), userns_mode]);
+        }
+
+        for volume in self.volumes_from.iter().cloned() {
+            args.extend([String::from("--volumes-from"), volume]);
+        }
+
+        if let Some(working_dir) = &self.working_dir {
+            args.extend([
+                String::from("--workdir"),
+                working_dir.to_string_lossy().to_string(),
+            ]);
+        }
+
+        if let Some(image) = self.image.as_ref().cloned() {
+            args.push(image);
+        }
+
+        if !self.command.is_empty() {
+            args.push(self.command.join(" "));
+        }
+
+        args
+    }
 }
 
 fn merge(base: &mut Value, other: Value) {
@@ -253,12 +598,24 @@ pub(crate) struct WeightDevice {
     pub(crate) weight: u16,
 }
 
+impl Display for WeightDevice {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}:{}", self.path.display(), self.weight)
+    }
+}
+
 #[serde_as]
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct ThrottleDevice {
     #[serde_as(as = "AbsPathBuf")]
     pub(crate) path: PathBuf,
     pub(crate) rate: Byte,
+}
+
+impl Display for ThrottleDevice {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}:{}", self.path.display(), self.rate)
+    }
 }
 
 #[skip_serializing_none]
@@ -344,6 +701,30 @@ impl Hash for FileReference {
     }
 }
 
+impl Display for FileReference {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let mut file_reference = format!(
+            "{},type=mount,target={}",
+            self.source,
+            self.target.as_ref().unwrap_or(&self.source)
+        );
+
+        if let Some(uid) = &self.uid {
+            file_reference = format!("{file_reference},uid={uid}");
+        }
+
+        if let Some(gid) = &self.gid {
+            file_reference = format!("{file_reference},gid={gid}");
+        }
+
+        if let Some(mode) = &self.mode {
+            file_reference = format!("{file_reference},mode={mode}");
+        }
+
+        write!(f, "{file_reference}")
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct Dependency {
     pub(crate) condition: Condition,
@@ -407,6 +788,21 @@ impl Hash for Device {
     }
 }
 
+impl Display for Device {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        if let Some(permissions) = &self.permissions {
+            write!(
+                f,
+                "{}:{}:{permissions}",
+                self.source.display(),
+                self.target.display()
+            )
+        } else {
+            write!(f, "{}:{}", self.source.display(), self.target.display())
+        }
+    }
+}
+
 #[skip_serializing_none]
 #[serde_as]
 #[serde_with::apply(
@@ -443,6 +839,15 @@ pub(crate) enum SwapLimit {
     Unlimited(i8),
 }
 
+impl Display for SwapLimit {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            SwapLimit::Limited(limit) => write!(f, "{limit}"),
+            SwapLimit::Unlimited(_) => write!(f, "{}", -1),
+        }
+    }
+}
+
 #[skip_serializing_none]
 #[serde_as]
 #[serde_with::apply(
@@ -476,6 +881,29 @@ pub(crate) struct Port {
     pub(crate) protocol: String,
 }
 
+impl Display for Port {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let mut port = self.target.clone();
+
+        match (&self.published, &self.host_ip) {
+            (None, None) => {}
+            (published, host_ip) => {
+                port = format!("{}:{port}", published.clone().unwrap_or_default());
+
+                if let Some(host_ip) = host_ip {
+                    port = format!("{host_ip}:{port}");
+                }
+            }
+        }
+
+        if self.protocol != "tcp" {
+            port = format!("{port}/{}", self.protocol);
+        }
+
+        write!(f, "{port}")
+    }
+}
+
 fn default_protocol() -> String {
     String::from("tcp")
 }
@@ -490,6 +918,12 @@ pub(crate) enum PullPolicy {
     Newer,
 }
 
+impl Display for PullPolicy {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        Debug::fmt(self, f)
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "kebab-case")]
 pub(crate) enum RestartPolicy {
@@ -499,11 +933,26 @@ pub(crate) enum RestartPolicy {
     UnlessStopped,
 }
 
+impl Display for RestartPolicy {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        Debug::fmt(self, f)
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(untagged)]
 pub(crate) enum ResourceLimit {
     Single(i32),
     Double { soft: i32, hard: i32 },
+}
+
+impl Display for ResourceLimit {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            ResourceLimit::Single(limit) => write!(f, "{limit}"),
+            ResourceLimit::Double { soft, hard } => write!(f, "{soft}:{hard}"),
+        }
+    }
 }
 
 #[skip_serializing_none]
@@ -698,17 +1147,7 @@ serde_conv!(
 serde_conv!(
     DeviceOrString,
     Device,
-    |device: &Device| {
-        if let Some(permissions) = &device.permissions {
-            format!(
-                "{}:{}:{permissions}",
-                device.source.display(),
-                device.target.display(),
-            )
-        } else {
-            format!("{}:{}", device.source.display(), device.target.display())
-        }
-    },
+    ToString::to_string,
     |device: String| -> Result<_> {
         let mut parts = device.split(':');
 
@@ -931,26 +1370,7 @@ serde_conv!(
 serde_conv!(
     PortOrString,
     Port,
-    |port: &Port| {
-        let mut string = port.target.clone();
-
-        match (&port.published, &port.host_ip) {
-            (None, None) => {}
-            (published, host_ip) => {
-                string = format!("{}:{string}", published.clone().unwrap_or_default());
-
-                if let Some(host_ip) = host_ip {
-                    string = format!("{host_ip}:{string}");
-                }
-            }
-        }
-
-        if port.protocol != "tcp" {
-            string = format!("{string}/{}", port.protocol);
-        }
-
-        string
-    },
+    ToString::to_string,
     |port: String| -> Result<_, Infallible> {
         let mut parts = port.split(':').rev();
         let container_port = parts.next().unwrap();
@@ -1073,7 +1493,7 @@ serde_conv!(
         }
 
         let options = options.split(',');
-        let mut unused = vec![];
+        let mut unused = Vec::new();
 
         for option in options {
             match option {
