@@ -1,6 +1,6 @@
 use std::{
     convert::Infallible,
-    fmt::{self, Debug, Display, Formatter},
+    fmt::{self, Display, Formatter},
     hash::{Hash, Hasher},
     path::{Path, PathBuf},
     time::Duration,
@@ -8,6 +8,7 @@ use std::{
 
 use anyhow::{anyhow, bail, Error, Result};
 use byte_unit::Byte;
+use heck::AsKebabCase;
 use humantime::{format_duration, parse_duration};
 use indexmap::{indexmap, IndexMap, IndexSet};
 use path_absolutize::Absolutize;
@@ -39,7 +40,6 @@ pub(crate) struct Compose {
     pub(crate) networks: IndexMap<String, Network>,
     #[serde_as(as = "IndexMap<_, DefaultOnNull>")]
     pub(crate) volumes: IndexMap<String, Volume>,
-    pub(crate) configs: IndexMap<String, Config>,
     pub(crate) secrets: IndexMap<String, Secret>,
 }
 
@@ -73,7 +73,6 @@ impl Compose {
 
         self.networks = other.networks;
         self.volumes = other.volumes;
-        self.configs = other.configs;
         self.secrets = other.secrets;
     }
 }
@@ -95,8 +94,6 @@ pub(crate) struct Service {
     pub(crate) cgroup_parent: Option<String>,
     #[serde_as(as = "PickFirst<(_, StringWithSeparator::<SpaceSeparator, String>)>")]
     pub(crate) command: Vec<String>,
-    #[serde_as(as = "DuplicateInsertsLastWinsSet<PickFirst<(_, FileReferenceOrString)>>")]
-    pub(crate) configs: IndexSet<FileReference>,
     pub(crate) container_name: Option<String>,
     #[serde_as(as = "Option<PickFirst<(DurationMicroSeconds, DurationWithSuffix)>>")]
     pub(crate) cpu_period: Option<Duration>,
@@ -176,6 +173,7 @@ pub(crate) struct Service {
     #[serde_as(as = "SecurityOptVec")]
     pub(crate) security_opt: Vec<(String, Option<String>)>,
     pub(crate) shm_size: Option<Byte>,
+    pub(crate) stdin_open: Option<bool>,
     #[serde_as(as = "Option<DurationWithSuffix>")]
     pub(crate) stop_grace_period: Option<Duration>,
     pub(crate) stop_signal: Option<String>,
@@ -202,6 +200,27 @@ fn default_service_networks() -> IndexMap<String, Option<ServiceNetwork>> {
     }
 }
 
+fn merge(base: &mut Value, other: Value) {
+    match (base, other) {
+        (base @ Value::Mapping(_), Value::Mapping(other)) => {
+            let base = base.as_mapping_mut().unwrap();
+
+            for (key, other_value) in other {
+                base.entry(key.clone())
+                    .and_modify(|value| match key.as_str().unwrap() {
+                        "command" | "entrypoint" => *value = other_value.clone(),
+                        _ => merge(value, other_value.clone()),
+                    })
+                    .or_insert(other_value);
+            }
+        }
+        (Value::Sequence(base), Value::Sequence(other)) => {
+            base.extend(other);
+        }
+        (base, other) => *base = other,
+    }
+}
+
 impl Service {
     pub(crate) fn merge(&mut self, other: &Self) {
         let mut value = serde_yaml::to_value(&self).unwrap();
@@ -210,7 +229,8 @@ impl Service {
         *self = serde_yaml::from_value(value).unwrap();
     }
 
-    pub(crate) fn as_args(&self) -> Vec<String> {
+    pub(crate) fn to_args(&self) -> (Vec<String>, Vec<String>) {
+        let mut global_args = Vec::new();
         let mut args = Vec::new();
 
         if let Some(blkio_config) = &self.blkio_config {
@@ -306,6 +326,61 @@ impl Service {
             args.extend([String::from("--cpuset-cpus"), cpuset]);
         }
 
+        for dependency in self.depends_on.keys().cloned() {
+            args.extend([String::from("--requires"), dependency]);
+        }
+
+        if let Some(deploy) = &self.deploy {
+            if let Some(resources) = &deploy.resources {
+                if let Some(limits) = &resources.limits {
+                    if let Some(memory) = limits.memory {
+                        args.extend([String::from("--memory"), memory.to_string()]);
+                    }
+                }
+
+                if let Some(reservations) = &resources.reservations {
+                    if let Some(cpus) = reservations.cpus {
+                        args.extend([String::from("--cpus"), cpus.to_string()]);
+                    }
+
+                    if let Some(memory) = reservations.memory {
+                        args.extend([String::from("--memory-reservation"), memory.to_string()]);
+                    }
+
+                    if let Some(pids) = reservations.pids {
+                        args.extend([String::from("--pids-limit"), pids.to_string()]);
+                    }
+                }
+            }
+        }
+
+        if let Some(cpus) = self.cpus {
+            if !args.contains(&String::from("--cpus")) {
+                args.extend([String::from("--cpus"), cpus.to_string()]);
+            }
+        }
+
+        if let Some(mem_limit) = self.mem_limit {
+            if !args.contains(&String::from("--memory")) {
+                args.extend([String::from("--memory"), mem_limit.to_string()]);
+            }
+        }
+
+        if let Some(mem_reservation) = self.mem_reservation {
+            if !args.contains(&String::from("--memory-reservation")) {
+                args.extend([
+                    String::from("--memory-reservation"),
+                    mem_reservation.to_string(),
+                ]);
+            }
+        }
+
+        if let Some(pids_limit) = self.pids_limit {
+            if !args.contains(&String::from("--pids-limit")) {
+                args.extend([String::from("--pids-limit"), pids_limit.to_string()]);
+            }
+        }
+
         for device_cgroup_rule in self.device_cgroup_rules.iter().cloned() {
             args.extend([String::from("--device-cgroup-rule"), device_cgroup_rule]);
         }
@@ -361,7 +436,9 @@ impl Service {
         }
 
         if let Some(healthcheck) = &self.healthcheck {
-            args.extend([String::from("--health-cmd"), healthcheck.test.join(" ")]);
+            if !healthcheck.test.is_empty() {
+                args.extend([String::from("--health-cmd"), healthcheck.test.join(" ")]);
+            }
 
             if let Some(interval) = healthcheck.interval {
                 args.extend([
@@ -407,6 +484,10 @@ impl Service {
 
         for (key, value) in &self.labels {
             args.extend([String::from("--label"), format!("{key}={value}")]);
+        }
+
+        for link in self.links.keys().cloned() {
+            args.extend([String::from("--requires"), link]);
         }
 
         if let Some(logging) = &self.logging {
@@ -467,7 +548,9 @@ impl Service {
         }
 
         if let Some(pull_policy) = &self.pull_policy {
-            args.extend([String::from("--pull"), pull_policy.to_string()]);
+            if *pull_policy != PullPolicy::Build {
+                args.extend([String::from("--pull"), pull_policy.to_string()]);
+            }
         }
 
         if self.read_only.unwrap_or_default() {
@@ -476,6 +559,10 @@ impl Service {
 
         if let Some(restart) = &self.restart {
             args.extend([String::from("--restart"), restart.to_string()]);
+        }
+
+        if let Some(runtime) = self.runtime.as_ref().cloned() {
+            global_args.extend([String::from("--runtime"), runtime]);
         }
 
         for secret in &self.secrets {
@@ -497,15 +584,23 @@ impl Service {
             args.extend([String::from("--shm-size"), shm_size.to_string()]);
         }
 
+        if self.stdin_open.unwrap_or_default() {
+            args.push(String::from("--interactive"));
+        }
+
         if let Some(stop_grace_period) = self.stop_grace_period {
             args.extend([
-                String::from("--stop-grace-period"),
+                String::from("--stop-timeout"),
                 stop_grace_period.as_secs().to_string(),
             ]);
         }
 
         if let Some(stop_signal) = self.stop_signal.as_ref().cloned() {
             args.extend([String::from("--stop-signal"), stop_signal]);
+        }
+
+        for (key, value) in &self.storage_opt {
+            global_args.extend([String::from("--storage-opt"), format!("{key}={value}")]);
         }
 
         for (key, value) in &self.sysctls {
@@ -551,28 +646,7 @@ impl Service {
             args.push(self.command.join(" "));
         }
 
-        args
-    }
-}
-
-fn merge(base: &mut Value, other: Value) {
-    match (base, other) {
-        (base @ Value::Mapping(_), Value::Mapping(other)) => {
-            let base = base.as_mapping_mut().unwrap();
-
-            for (key, other_value) in other {
-                base.entry(key.clone())
-                    .and_modify(|value| match key.as_str().unwrap() {
-                        "command" | "entrypoint" => *value = other_value.clone(),
-                        _ => merge(value, other_value.clone()),
-                    })
-                    .or_insert(other_value);
-            }
-        }
-        (Value::Sequence(base), Value::Sequence(other)) => {
-            base.extend(other);
-        }
-        (base, other) => *base = other,
+        (global_args, args)
     }
 }
 
@@ -669,60 +743,6 @@ pub(crate) struct BuildConfig {
 
 fn default_dockerfile() -> PathBuf {
     PathBuf::from("Dockerfile")
-}
-
-#[skip_serializing_none]
-#[serde_as]
-#[derive(Serialize, Deserialize, Default, Debug)]
-pub(crate) struct FileReference {
-    #[serde_as(as = "DisplayFromAny")]
-    pub(crate) source: String,
-    #[serde_as(as = "Option<DisplayFromAny>")]
-    pub(crate) target: Option<String>,
-    #[serde_as(as = "Option<DisplayFromAny>")]
-    pub(crate) uid: Option<String>,
-    #[serde_as(as = "Option<DisplayFromAny>")]
-    pub(crate) gid: Option<String>,
-    #[serde_as(as = "Option<PickFirst<(_, DisplayFromStr)>>")]
-    pub(crate) mode: Option<u32>,
-}
-
-impl PartialEq for FileReference {
-    fn eq(&self, other: &Self) -> bool {
-        self.source == other.source
-    }
-}
-
-impl Eq for FileReference {}
-
-impl Hash for FileReference {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.source.hash(state);
-    }
-}
-
-impl Display for FileReference {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let mut file_reference = format!(
-            "{},type=mount,target={}",
-            self.source,
-            self.target.as_ref().unwrap_or(&self.source)
-        );
-
-        if let Some(uid) = &self.uid {
-            file_reference = format!("{file_reference},uid={uid}");
-        }
-
-        if let Some(gid) = &self.gid {
-            file_reference = format!("{file_reference},gid={gid}");
-        }
-
-        if let Some(mode) = &self.mode {
-            file_reference = format!("{file_reference},mode={mode}");
-        }
-
-        write!(f, "{file_reference}")
-    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -881,6 +901,10 @@ pub(crate) struct Port {
     pub(crate) protocol: String,
 }
 
+fn default_protocol() -> String {
+    String::from("tcp")
+}
+
 impl Display for Port {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let mut port = self.target.clone();
@@ -904,11 +928,7 @@ impl Display for Port {
     }
 }
 
-fn default_protocol() -> String {
-    String::from("tcp")
-}
-
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Debug)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum PullPolicy {
     Always,
@@ -920,7 +940,7 @@ pub(crate) enum PullPolicy {
 
 impl Display for PullPolicy {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        Debug::fmt(self, f)
+        write!(f, "{}", AsKebabCase(format!("{self:?}")))
     }
 }
 
@@ -935,7 +955,61 @@ pub(crate) enum RestartPolicy {
 
 impl Display for RestartPolicy {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        Debug::fmt(self, f)
+        write!(f, "{}", AsKebabCase(format!("{self:?}")))
+    }
+}
+
+#[skip_serializing_none]
+#[serde_as]
+#[derive(Serialize, Deserialize, Default, Debug)]
+pub(crate) struct FileReference {
+    #[serde_as(as = "DisplayFromAny")]
+    pub(crate) source: String,
+    #[serde_as(as = "Option<DisplayFromAny>")]
+    pub(crate) target: Option<String>,
+    #[serde_as(as = "Option<DisplayFromAny>")]
+    pub(crate) uid: Option<String>,
+    #[serde_as(as = "Option<DisplayFromAny>")]
+    pub(crate) gid: Option<String>,
+    #[serde_as(as = "Option<PickFirst<(_, DisplayFromStr)>>")]
+    pub(crate) mode: Option<u32>,
+}
+
+impl PartialEq for FileReference {
+    fn eq(&self, other: &Self) -> bool {
+        self.source == other.source
+    }
+}
+
+impl Eq for FileReference {}
+
+impl Hash for FileReference {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.source.hash(state);
+    }
+}
+
+impl Display for FileReference {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let mut file_reference = vec![self.source.clone()];
+
+        if let Some(target) = &self.target {
+            file_reference.push(format!("target={target}"));
+        }
+
+        if let Some(uid) = &self.uid {
+            file_reference.push(format!("uid={uid}"));
+        }
+
+        if let Some(gid) = &self.gid {
+            file_reference.push(format!("gid={gid}"));
+        }
+
+        if let Some(mode) = &self.mode {
+            file_reference.push(format!("mode={mode}"));
+        }
+
+        write!(f, "{}", file_reference.join(","))
     }
 }
 
@@ -1072,16 +1146,6 @@ pub(crate) struct Volume {
         as = "PickFirst<(_, IndexMap<DisplayFromAny, DisplayFromAny>, MappingWithEqualsEmpty)>"
     )]
     pub(crate) labels: IndexMap<String, String>,
-}
-
-#[skip_serializing_none]
-#[serde_as]
-#[derive(Serialize, Deserialize, Debug)]
-pub(crate) struct Config {
-    pub(crate) name: Option<String>,
-    #[serde_as(as = "Option<AbsPathBuf>")]
-    pub(crate) file: Option<PathBuf>,
-    pub(crate) external: Option<bool>,
 }
 
 #[skip_serializing_none]

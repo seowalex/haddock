@@ -22,24 +22,11 @@ pub(crate) struct Podman {
 
 impl Podman {
     pub(crate) fn new(project_directory: &Path) -> Result<Self> {
-        let mut command = Command::new("podman");
-
-        command
-            .current_dir(project_directory)
-            .args(["version", "--format", "json"]);
-
-        let output = command
-            .output()
-            .with_context(|| {
-                anyhow!(
-                    "`{} {}` cannot be executed",
-                    command.get_program().to_string_lossy(),
-                    command.get_args().map(OsStr::to_string_lossy).join(" ")
-                )
-            })?
-            .stdout;
-        let data = String::from_utf8_lossy(&output);
-        let version = serde_json::from_str::<Version>(&data)
+        let podman = Podman {
+            project_directory: project_directory.to_path_buf(),
+        };
+        let output = podman.output(["version", "--format", "json"])?;
+        let version = serde_json::from_str::<Version>(&output)
             .with_context(|| anyhow!("Podman version not recognised"))?
             .client
             .version;
@@ -51,12 +38,10 @@ impl Podman {
             );
         }
 
-        Ok(Podman {
-            project_directory: project_directory.to_path_buf(),
-        })
+        Ok(podman)
     }
 
-    pub(crate) fn run<I, S>(&self, args: I) -> Command
+    fn run<I, S>(&self, args: I) -> Command
     where
         I: IntoIterator<Item = S>,
         S: AsRef<OsStr>,

@@ -396,6 +396,7 @@ dependencies = [
  "clap",
  "dotenvy",
  "figment",
+ "heck",
  "humantime",
  "indexmap",
  "itertools",

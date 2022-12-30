@@ -243,7 +243,6 @@ pub(crate) fn parse(config: &Config, no_interpolate: bool) -> Result<Compose> {
 
     let mut all_networks = IndexSet::new();
     let mut all_volumes = IndexSet::new();
-    let mut all_configs = IndexSet::new();
     let mut all_secrets = IndexSet::new();
 
     for service in combined_file.services.values_mut() {
@@ -264,7 +263,6 @@ pub(crate) fn parse(config: &Config, no_interpolate: bool) -> Result<Compose> {
                     _ => None,
                 }),
         );
-        all_configs.extend(service.configs.iter().map(|config| &config.source));
         all_secrets.extend(service.secrets.iter().map(|secret| &secret.source));
     }
 
@@ -296,22 +294,6 @@ pub(crate) fn parse(config: &Config, no_interpolate: bool) -> Result<Compose> {
         volume.name.get_or_insert_with(|| {
             match (
                 volume.external.unwrap_or_default(),
-                env::var("COMPOSE_PROJECT_NAME").ok(),
-            ) {
-                (false, Some(project_name)) => format!("{project_name}_{name}"),
-                _ => name.clone(),
-            }
-        });
-    }
-
-    combined_file
-        .configs
-        .retain(|config, _| all_configs.contains(config));
-
-    for (name, config) in &mut combined_file.configs {
-        config.name.get_or_insert_with(|| {
-            match (
-                config.external.unwrap_or_default(),
                 env::var("COMPOSE_PROJECT_NAME").ok(),
             ) {
                 (false, Some(project_name)) => format!("{project_name}_{name}"),
@@ -372,15 +354,6 @@ pub(crate) fn parse(config: &Config, no_interpolate: bool) -> Result<Compose> {
             }
         }
 
-        for config in &service.configs {
-            if !combined_file.configs.contains_key(&config.source) {
-                bail!(
-                    "Service \"{name}\" refers to undefined config \"{}\"",
-                    config.source
-                );
-            }
-        }
-
         for secret in &service.secrets {
             if !combined_file.secrets.contains_key(&secret.source) {
                 bail!(
@@ -411,12 +384,6 @@ pub(crate) fn parse(config: &Config, no_interpolate: bool) -> Result<Compose> {
                 || !volume.labels.is_empty())
         {
             bail!("Conflicting parameters specified for volume \"{name}\"");
-        }
-    }
-
-    for (name, config) in &combined_file.configs {
-        if config.external.unwrap_or_default() && config.file.is_some() {
-            bail!("Conflicting parameters specified for config \"{name}\"");
         }
     }
 

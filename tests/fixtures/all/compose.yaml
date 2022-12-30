@@ -25,9 +25,6 @@ services:
       - SYS_ADMIN
     cgroup_parent: m-executor-abcd
     command: bundle exec thin -p 3000
-    configs:
-      - my_config
-      - my_other_config
     container_name: my-web-container
     cpuset: 0-3
     depends_on:
@@ -105,6 +102,8 @@ services:
       - '127.0.0.1:8001:8001'
       - '127.0.0.1:5000-5010:5000-5010'
       - '6060:6060/udp'
+    pull_policy: always
+    restart: on-failure
     secrets:
       - server-certificate
     security_opt:
@@ -165,12 +164,6 @@ services:
         - 'linux/amd64'
         - 'linux/arm64'
     command: ['bundle', 'exec', 'thin', '-p', '3000']
-    configs:
-      - source: my_config
-        target: /redis_config
-        uid: '103'
-        gid: '103'
-        mode: 0440
     cpuset: 0,1
     dns:
       - 8.8.8.8
@@ -237,11 +230,6 @@ networks:
   bar:
 volumes:
   foo:
-configs:
-  my_config:
-    file: ./my_config.txt
-  my_other_config:
-    external: true
 secrets:
   server-certificate:
     file: ./server.cert
