@@ -547,10 +547,14 @@ impl Service {
             args.push(String::from("--privileged"));
         }
 
-        if let Some(pull_policy) = &self.pull_policy {
-            if *pull_policy != PullPolicy::Build {
-                args.extend([String::from("--pull"), pull_policy.to_string()]);
-            }
+        if let Some(
+            pull_policy @ (PullPolicy::Always
+            | PullPolicy::Never
+            | PullPolicy::Missing
+            | PullPolicy::Newer),
+        ) = &self.pull_policy
+        {
+            args.extend([String::from("--pull"), pull_policy.to_string()]);
         }
 
         if self.read_only.unwrap_or_default() {
@@ -625,6 +629,17 @@ impl Service {
 
         if let Some(userns_mode) = self.userns_mode.as_ref().cloned() {
             args.extend([String::from("--userns"), userns_mode]);
+        }
+
+        for volume in &self.volumes {
+            match volume.r#type {
+                ServiceVolumeType::Volume(_) | ServiceVolumeType::Bind(_) => {
+                    args.extend([String::from("--volume"), volume.to_string()]);
+                }
+                ServiceVolumeType::Tmpfs => {
+                    args.extend([String::from("--tmpfs"), volume.to_string()]);
+                }
+            }
         }
 
         for volume in self.volumes_from.iter().cloned() {
@@ -928,7 +943,7 @@ impl Display for Port {
     }
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum PullPolicy {
     Always,
@@ -1038,8 +1053,8 @@ pub(crate) struct ServiceVolume {
     #[serde_as(as = "DisplayFromAny")]
     pub(crate) target: PathBuf,
     pub(crate) read_only: Option<bool>,
-    pub(crate) bind: Option<ServiceVolumeBind>,
     pub(crate) volume: Option<ServiceVolumeVolume>,
+    pub(crate) bind: Option<ServiceVolumeBind>,
     pub(crate) tmpfs: Option<ServiceVolumeTmpfs>,
 }
 
@@ -1057,6 +1072,61 @@ impl Hash for ServiceVolume {
     }
 }
 
+impl Display for ServiceVolume {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let mut volume = vec![self.target.to_string_lossy().to_string()];
+        let mut options = Vec::new();
+
+        if self.read_only.unwrap_or_default() {
+            options.push(String::from("ro"));
+        }
+
+        match &self.r#type {
+            ServiceVolumeType::Volume(source) => {
+                if let Some(source) = source {
+                    volume.insert(0, source.clone());
+
+                    if let Some(volume) = &self.volume {
+                        if volume.nocopy.unwrap_or_default() {
+                            options.push(String::from("nocopy"));
+                        }
+                    }
+                }
+            }
+            ServiceVolumeType::Bind(source) => {
+                volume.insert(0, source.to_string_lossy().to_string());
+
+                if let Some(bind) = &self.bind {
+                    if let Some(propagation) = bind.propagation.as_ref().cloned() {
+                        options.push(propagation);
+                    }
+
+                    if let Some(selinux) = bind.selinux.as_ref().cloned() {
+                        options.push(selinux);
+                    }
+                }
+            }
+            ServiceVolumeType::Tmpfs => {
+                if let Some(tmpfs) = &self.tmpfs {
+                    if let Some(size) = tmpfs.size {
+                        options.push(format!("size={size}"));
+                    }
+
+                    if let Some(mode) = tmpfs.mode {
+                        options.push(format!("mode={mode}"));
+                    }
+                }
+            }
+        }
+
+        if options.is_empty() {
+            write!(f, "{}", volume.join(":"))
+        } else {
+            write!(f, "{}:{}", volume.join(":"), options.join(","))
+        }
+    }
+}
+
 #[skip_serializing_none]
 #[serde_as]
 #[derive(Serialize, Deserialize, Debug)]
@@ -1068,6 +1138,12 @@ pub(crate) enum ServiceVolumeType {
 }
 
 #[skip_serializing_none]
+#[derive(Serialize, Deserialize, Debug)]
+pub(crate) struct ServiceVolumeVolume {
+    pub(crate) nocopy: Option<bool>,
+}
+
+#[skip_serializing_none]
 #[serde_as]
 #[derive(Serialize, Deserialize, Default, Debug)]
 pub(crate) struct ServiceVolumeBind {
@@ -1076,12 +1152,6 @@ pub(crate) struct ServiceVolumeBind {
     pub(crate) create_host_path: Option<bool>,
     #[serde_as(as = "Option<DisplayFromAny>")]
     pub(crate) selinux: Option<String>,
-}
-
-#[skip_serializing_none]
-#[derive(Serialize, Deserialize, Debug)]
-pub(crate) struct ServiceVolumeVolume {
-    pub(crate) nocopy: Option<bool>,
 }
 
 #[skip_serializing_none]
@@ -1506,7 +1576,7 @@ serde_conv!(
 serde_conv!(
     ServiceVolumeOrString,
     ServiceVolume,
-    |_| {},
+    ToString::to_string,
     |mount: String| -> Result<_> {
         let mut r#type = ServiceVolumeType::Volume(None);
         let target;
