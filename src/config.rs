@@ -62,8 +62,7 @@ fn resolve(flags: &Flags) -> Result<Config> {
                 if file.as_os_str() == "-" {
                     Ok(file)
                 } else {
-                    file.absolutize_from(&current_dir)
-                        .map(|file| file.to_path_buf())
+                    file.absolutize_from(&current_dir).map(PathBuf::from)
                 }
             })
             .collect::<Result<Vec<_>, _>>()?
@@ -73,10 +72,11 @@ fn resolve(flags: &Flags) -> Result<Config> {
             &COMPOSE_FILE_NAMES,
         )?;
 
-        let override_file = file.with_extension(format!(
-            "override.{}",
-            file.extension().unwrap().to_string_lossy()
-        ));
+        let override_file = file.with_extension(if let Some(extension) = file.extension() {
+            format!("override.{}", extension.to_string_lossy())
+        } else {
+            String::from("override")
+        });
 
         if override_file.is_file() {
             vec![&file, &override_file]
@@ -84,10 +84,7 @@ fn resolve(flags: &Flags) -> Result<Config> {
             vec![&file]
         }
         .into_iter()
-        .map(|file| {
-            file.absolutize_from(&current_dir)
-                .map(|file| file.to_path_buf())
-        })
+        .map(|file| file.absolutize_from(&current_dir).map(PathBuf::from))
         .collect::<Result<Vec<_>, _>>()?
     };
 

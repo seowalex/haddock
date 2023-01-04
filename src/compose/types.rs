@@ -330,44 +330,50 @@ impl Service {
             args.extend([String::from("--requires"), dependency]);
         }
 
+        let mut is_deploy_v2 = [true; 4];
+
         if let Some(deploy) = &self.deploy {
             if let Some(resources) = &deploy.resources {
                 if let Some(limits) = &resources.limits {
                     if let Some(memory) = limits.memory {
                         args.extend([String::from("--memory"), memory.to_string()]);
+                        is_deploy_v2[0] = false;
                     }
                 }
 
                 if let Some(reservations) = &resources.reservations {
                     if let Some(cpus) = reservations.cpus {
                         args.extend([String::from("--cpus"), cpus.to_string()]);
+                        is_deploy_v2[1] = false;
                     }
 
                     if let Some(memory) = reservations.memory {
                         args.extend([String::from("--memory-reservation"), memory.to_string()]);
+                        is_deploy_v2[2] = false;
                     }
 
                     if let Some(pids) = reservations.pids {
                         args.extend([String::from("--pids-limit"), pids.to_string()]);
+                        is_deploy_v2[3] = false;
                     }
                 }
             }
         }
 
-        if let Some(cpus) = self.cpus {
-            if !args.contains(&String::from("--cpus")) {
-                args.extend([String::from("--cpus"), cpus.to_string()]);
-            }
-        }
-
-        if let Some(mem_limit) = self.mem_limit {
-            if !args.contains(&String::from("--memory")) {
+        if is_deploy_v2[0] {
+            if let Some(mem_limit) = self.mem_limit {
                 args.extend([String::from("--memory"), mem_limit.to_string()]);
             }
         }
 
-        if let Some(mem_reservation) = self.mem_reservation {
-            if !args.contains(&String::from("--memory-reservation")) {
+        if is_deploy_v2[1] {
+            if let Some(cpus) = self.cpus {
+                args.extend([String::from("--cpus"), cpus.to_string()]);
+            }
+        }
+
+        if is_deploy_v2[2] {
+            if let Some(mem_reservation) = self.mem_reservation {
                 args.extend([
                     String::from("--memory-reservation"),
                     mem_reservation.to_string(),
@@ -375,8 +381,8 @@ impl Service {
             }
         }
 
-        if let Some(pids_limit) = self.pids_limit {
-            if !args.contains(&String::from("--pids-limit")) {
+        if is_deploy_v2[3] {
+            if let Some(pids_limit) = self.pids_limit {
                 args.extend([String::from("--pids-limit"), pids_limit.to_string()]);
             }
         }
@@ -1237,7 +1243,7 @@ serde_conv!(
         Path::new(&path)
             .absolutize()
             .map_err(Error::from)
-            .map(|path| path.to_path_buf())
+            .map(PathBuf::from)
     }
 );
 
@@ -1286,15 +1292,7 @@ serde_conv!(
         let mut parts = device.split(':');
 
         Ok(Device {
-            source: parts
-                .next()
-                .map(|source| {
-                    Path::new(source)
-                        .absolutize()
-                        .map(|source| source.to_path_buf())
-                })
-                .transpose()?
-                .unwrap(),
+            source: Path::new(parts.next().unwrap()).absolutize()?.to_path_buf(),
             target: parts.next().map(PathBuf::from).unwrap(),
             permissions: parts.next().map(ToString::to_string),
         })
