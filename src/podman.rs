@@ -1,16 +1,13 @@
-pub(crate) mod types;
+mod types;
 
-use std::{
-    ffi::OsStr,
-    path::{Path, PathBuf},
-    process::Command,
-};
+use std::{ffi::OsStr, path::PathBuf, process::Command};
 
 use anyhow::{anyhow, bail, Context, Result};
 use itertools::Itertools;
 use once_cell::sync::Lazy;
 
 use self::types::Version;
+use crate::config::Config;
 
 static PODMAN_MIN_SUPPORTED_VERSION: Lazy<semver::Version> =
     Lazy::new(|| semver::Version::new(4, 3, 0));
@@ -22,10 +19,10 @@ pub(crate) struct Podman {
 }
 
 impl Podman {
-    pub(crate) fn new(project_directory: &Path, verbose: bool) -> Result<Self> {
+    pub(crate) fn new(config: &Config) -> Result<Self> {
         let podman = Podman {
-            project_directory: project_directory.to_path_buf(),
-            verbose,
+            project_directory: config.project_directory.clone(),
+            verbose: config.verbose,
         };
         let output = podman.output(["version", "--format", "json"])?;
         let version = serde_json::from_str::<Version>(&output)

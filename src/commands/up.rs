@@ -1,3 +1,5 @@
+use std::env;
+
 use anyhow::{bail, Result};
 use clap::ValueEnum;
 use itertools::Itertools;
@@ -112,7 +114,7 @@ enum PullPolicy {
 }
 
 pub(crate) fn run(args: Args, config: Config) -> Result<()> {
-    let podman = Podman::new(&config.project_directory)?;
+    let podman = Podman::new(&config)?;
     let file = compose::parse(&config, false)?;
     let mut dependencies = DiGraphMap::new();
 
@@ -143,6 +145,81 @@ pub(crate) fn run(args: Args, config: Config) -> Result<()> {
                 .map(|component| format!("{} -> {}", component.iter().join(" -> "), component[0]))
                 .join(", ")
         );
+    }
+
+    podman
+        .run([
+            "pod",
+            "create",
+            "--share",
+            "none",
+            "--label",
+            &format!("io.podman.compose.config-hash={}", file.digest()),
+            &env::var("COMPOSE_PROJECT_NAME")?,
+        ])
+        .ok();
+
+    for (_, network) in file.networks {
+        if podman
+            .run(["network", "exists", network.name.as_ref().unwrap()])
+            .is_err()
+        {
+            if network.external.unwrap_or_default() {
+                bail!(
+                    "External network \"{}\" not found",
+                    network.name.as_ref().unwrap()
+                );
+            }
+
+            podman.run(
+                ["network", "create"]
+                    .into_iter()
+                    .map(String::from)
+                    .chain(network.to_args().into_iter()),
+            )?;
+        }
+    }
+
+    for (_, volume) in file.volumes {
+        if podman
+            .run(["volume", "exists", volume.name.as_ref().unwrap()])
+            .is_err()
+        {
+            if volume.external.unwrap_or_default() {
+                bail!(
+                    "External volume \"{}\" not found",
+                    volume.name.as_ref().unwrap()
+                );
+            }
+
+            podman.run(
+                ["volume", "create"]
+                    .into_iter()
+                    .map(String::from)
+                    .chain(volume.to_args().into_iter()),
+            )?;
+        }
+    }
+
+    for (_, secret) in file.secrets {
+        if podman
+            .run(["secret", "inspect", secret.name.as_ref().unwrap()])
+            .is_err()
+        {
+            if secret.external.unwrap_or_default() {
+                bail!(
+                    "External secret \"{}\" not found",
+                    secret.name.as_ref().unwrap()
+                );
+            }
+
+            podman.run(
+                ["secret", "create"]
+                    .into_iter()
+                    .map(String::from)
+                    .chain(secret.to_args().into_iter()),
+            )?;
+        }
     }
 
     Ok(())
