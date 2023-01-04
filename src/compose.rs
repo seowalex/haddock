@@ -319,6 +319,41 @@ pub(crate) fn parse(config: &Config, no_interpolate: bool) -> Result<Compose> {
     }
 
     for (name, service) in &combined_file.services {
+        if service.scale.is_some() {
+            eprintln!(
+                "{} `scale` is deprecated, use the `deploy.replicas` element instead",
+                Paint::yellow("Warning:").bold()
+            );
+        }
+
+        if service.mem_limit.is_some() {
+            eprintln!(
+                "{} `mem_limit` is deprecated, use the `deploy.limits.memory` element instead",
+                Paint::yellow("Warning:").bold()
+            );
+        }
+
+        if service.cpus.is_some() {
+            eprintln!(
+                "{} `cpus` is deprecated, use the `deploy.reservations.cpus` element instead",
+                Paint::yellow("Warning:").bold()
+            );
+        }
+
+        if service.mem_reservation.is_some() {
+            eprintln!(
+                "{} `mem_reservation` is deprecated, use the `deploy.reservations.memory` element instead",
+                Paint::yellow("Warning:").bold()
+            );
+        }
+
+        if service.pids_limit.is_some() {
+            eprintln!(
+                "{} `pids_limit` is deprecated, use the `deploy.reservations.pids` element instead",
+                Paint::yellow("Warning:").bold()
+            );
+        }
+
         if service.build.is_none() && service.image.is_none() {
             bail!("Service \"{name}\" has neither an image nor a build context specified");
         }
@@ -327,6 +362,35 @@ pub(crate) fn parse(config: &Config, no_interpolate: bool) -> Result<Compose> {
             && !service.ports.is_empty()
         {
             bail!("Service \"{name}\" cannot have port mappings due to host network mode");
+        }
+
+        if service.container_name.is_some() && service.scale.unwrap_or(1) > 1 {
+            bail!(
+                "Service \"{name}\" cannot scale beyond one container as it has a container name"
+            );
+        }
+
+        if let Some(deploy) = &service.deploy {
+            if service.container_name.is_some() && deploy.replicas.unwrap_or(1) > 1 {
+                bail!(
+                    "Service \"{name}\" cannot scale beyond one container as it has a container name"
+                );
+            }
+        }
+
+        for label in service.labels.keys() {
+            if label.starts_with("com.docker.compose") || label.starts_with("io.podman.compose") {
+                bail!("Service \"name\" cannot have labels starting with \"com.docker.compose\" or \"io.podman.compose\"");
+            }
+        }
+
+        if let Some(build) = &service.build {
+            for label in build.labels.keys() {
+                if label.starts_with("com.docker.compose") || label.starts_with("io.podman.compose")
+                {
+                    bail!("Service \"name\" cannot have labels starting with \"com.docker.compose\" or \"io.podman.compose\"");
+                }
+            }
         }
 
         for dependency in service.depends_on.keys().chain(service.links.keys()) {
@@ -375,6 +439,12 @@ pub(crate) fn parse(config: &Config, no_interpolate: bool) -> Result<Compose> {
         {
             bail!("Conflicting parameters specified for network \"{name}\"");
         }
+
+        for label in network.labels.keys() {
+            if label.starts_with("com.docker.compose") || label.starts_with("io.podman.compose") {
+                bail!("Network \"name\" cannot have labels starting with \"com.docker.compose\" or \"io.podman.compose\"");
+            }
+        }
     }
 
     for (name, volume) in &combined_file.volumes {
@@ -384,6 +454,12 @@ pub(crate) fn parse(config: &Config, no_interpolate: bool) -> Result<Compose> {
                 || !volume.labels.is_empty())
         {
             bail!("Conflicting parameters specified for volume \"{name}\"");
+        }
+
+        for label in volume.labels.keys() {
+            if label.starts_with("com.docker.compose") || label.starts_with("io.podman.compose") {
+                bail!("Volume \"name\" cannot have labels starting with \"com.docker.compose\" or \"io.podman.compose\"");
+            }
         }
     }
 

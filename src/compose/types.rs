@@ -167,7 +167,7 @@ pub(crate) struct Service {
     pub(crate) read_only: Option<bool>,
     pub(crate) restart: Option<RestartPolicy>,
     pub(crate) runtime: Option<String>,
-    pub(crate) scale: Option<i32>,
+    pub(crate) scale: Option<u32>,
     #[serde_as(as = "DuplicateInsertsLastWinsSet<PickFirst<(_, FileReferenceOrString)>>")]
     pub(crate) secrets: IndexSet<FileReference>,
     #[serde_as(as = "SecurityOptVec")]
@@ -330,49 +330,49 @@ impl Service {
             args.extend([String::from("--requires"), dependency]);
         }
 
-        let mut is_deploy_v2 = [true; 4];
+        let mut is_deploy_v3 = [false; 4];
 
         if let Some(deploy) = &self.deploy {
             if let Some(resources) = &deploy.resources {
                 if let Some(limits) = &resources.limits {
                     if let Some(memory) = limits.memory {
                         args.extend([String::from("--memory"), memory.to_string()]);
-                        is_deploy_v2[0] = false;
+                        is_deploy_v3[0] = true;
                     }
                 }
 
                 if let Some(reservations) = &resources.reservations {
                     if let Some(cpus) = reservations.cpus {
                         args.extend([String::from("--cpus"), cpus.to_string()]);
-                        is_deploy_v2[1] = false;
+                        is_deploy_v3[1] = true;
                     }
 
                     if let Some(memory) = reservations.memory {
                         args.extend([String::from("--memory-reservation"), memory.to_string()]);
-                        is_deploy_v2[2] = false;
+                        is_deploy_v3[2] = true;
                     }
 
                     if let Some(pids) = reservations.pids {
                         args.extend([String::from("--pids-limit"), pids.to_string()]);
-                        is_deploy_v2[3] = false;
+                        is_deploy_v3[3] = true;
                     }
                 }
             }
         }
 
-        if is_deploy_v2[0] {
+        if !is_deploy_v3[0] {
             if let Some(mem_limit) = self.mem_limit {
                 args.extend([String::from("--memory"), mem_limit.to_string()]);
             }
         }
 
-        if is_deploy_v2[1] {
+        if !is_deploy_v3[1] {
             if let Some(cpus) = self.cpus {
                 args.extend([String::from("--cpus"), cpus.to_string()]);
             }
         }
 
-        if is_deploy_v2[2] {
+        if !is_deploy_v3[2] {
             if let Some(mem_reservation) = self.mem_reservation {
                 args.extend([
                     String::from("--memory-reservation"),
@@ -381,7 +381,7 @@ impl Service {
             }
         }
 
-        if is_deploy_v2[3] {
+        if !is_deploy_v3[3] {
             if let Some(pids_limit) = self.pids_limit {
                 args.extend([String::from("--pids-limit"), pids_limit.to_string()]);
             }
@@ -638,14 +638,13 @@ impl Service {
         }
 
         for volume in &self.volumes {
-            match volume.r#type {
-                ServiceVolumeType::Volume(_) | ServiceVolumeType::Bind(_) => {
-                    args.extend([String::from("--volume"), volume.to_string()]);
-                }
-                ServiceVolumeType::Tmpfs => {
-                    args.extend([String::from("--tmpfs"), volume.to_string()]);
-                }
-            }
+            args.extend([
+                String::from(match volume.r#type {
+                    ServiceVolumeType::Volume(_) | ServiceVolumeType::Bind(_) => "--volume",
+                    ServiceVolumeType::Tmpfs => "--tmpfs",
+                }),
+                volume.to_string(),
+            ]);
         }
 
         for volume in self.volumes_from.iter().cloned() {
@@ -784,7 +783,7 @@ pub(crate) enum Condition {
 #[skip_serializing_none]
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct DeployConfig {
-    pub(crate) replicas: Option<i32>,
+    pub(crate) replicas: Option<u32>,
     pub(crate) resources: Option<Resources>,
 }
 
@@ -1083,10 +1082,6 @@ impl Display for ServiceVolume {
         let mut volume = vec![self.target.to_string_lossy().to_string()];
         let mut options = Vec::new();
 
-        if self.read_only.unwrap_or_default() {
-            options.push(String::from("ro"));
-        }
-
         match &self.r#type {
             ServiceVolumeType::Volume(source) => {
                 if let Some(source) = source {
@@ -1123,6 +1118,10 @@ impl Display for ServiceVolume {
                     }
                 }
             }
+        }
+
+        if self.read_only.unwrap_or_default() {
+            options.push(String::from("ro"));
         }
 
         if options.is_empty() {
@@ -1189,6 +1188,58 @@ pub(crate) struct Network {
     pub(crate) external: Option<bool>,
 }
 
+impl Network {
+    pub(crate) fn to_args(&self) -> Vec<String> {
+        let mut args = Vec::new();
+
+        if !self.external.unwrap_or_default() {
+            if let Some(driver) = self.driver.as_ref().cloned() {
+                args.extend([String::from("--driver"), driver]);
+            }
+
+            for (key, value) in &self.driver_opts {
+                args.extend([String::from("--opt"), format!("{key}={value}")]);
+            }
+
+            if self.enable_ipv6.unwrap_or_default() {
+                args.push(String::from("--ipv6"));
+            }
+
+            if let Some(ipam) = &self.ipam {
+                if let Some(driver) = ipam.driver.as_ref().cloned() {
+                    args.extend([String::from("--ipam-driver"), driver]);
+                }
+
+                for config in &ipam.config {
+                    if let Some(subnet) = config.subnet.as_ref().cloned() {
+                        args.extend([String::from("--subnet"), subnet]);
+                    }
+
+                    if let Some(ip_range) = config.ip_range.as_ref().cloned() {
+                        args.extend([String::from("--ip-range"), ip_range]);
+                    }
+
+                    if let Some(gateway) = config.gateway.as_ref().cloned() {
+                        args.extend([String::from("--gateway"), gateway]);
+                    }
+                }
+            }
+
+            if self.internal.unwrap_or_default() {
+                args.push(String::from("--internal"));
+            }
+
+            for (key, value) in &self.labels {
+                args.extend([String::from("--label"), format!("{key}={value}")]);
+            }
+
+            args.push(self.name.clone().unwrap());
+        }
+
+        args
+    }
+}
+
 #[skip_serializing_none]
 #[serde_with::apply(
     Vec => #[serde(skip_serializing_if = "Vec::is_empty", default)]
@@ -1224,6 +1275,30 @@ pub(crate) struct Volume {
     pub(crate) labels: IndexMap<String, String>,
 }
 
+impl Volume {
+    pub(crate) fn to_args(&self) -> Vec<String> {
+        let mut args = Vec::new();
+
+        if !self.external.unwrap_or_default() {
+            if let Some(driver) = self.driver.as_ref().cloned() {
+                args.extend([String::from("--driver"), driver]);
+            }
+
+            for (key, value) in &self.driver_opts {
+                args.extend([String::from("--opt"), format!("{key}={value}")]);
+            }
+
+            for (key, value) in &self.labels {
+                args.extend([String::from("--label"), format!("{key}={value}")]);
+            }
+
+            args.push(self.name.clone().unwrap());
+        }
+
+        args
+    }
+}
+
 #[skip_serializing_none]
 #[serde_as]
 #[derive(Serialize, Deserialize, Debug)]
@@ -1233,6 +1308,28 @@ pub(crate) struct Secret {
     pub(crate) file: Option<PathBuf>,
     pub(crate) environment: Option<String>,
     pub(crate) external: Option<bool>,
+}
+
+impl Secret {
+    pub(crate) fn to_args(&self) -> Vec<String> {
+        let mut args = Vec::new();
+
+        if !self.external.unwrap_or_default() {
+            if self.environment.is_some() {
+                args.push(String::from("--env"));
+            }
+
+            args.push(self.name.clone().unwrap());
+
+            if let Some(environment) = self.environment.as_ref().cloned() {
+                args.push(environment);
+            } else if let Some(file) = &self.file {
+                args.push(file.to_string_lossy().to_string());
+            }
+        }
+
+        args
+    }
 }
 
 serde_conv!(
