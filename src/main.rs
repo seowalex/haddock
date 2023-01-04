@@ -7,7 +7,7 @@ mod utils;
 use std::{env, path::PathBuf};
 
 use anyhow::Result;
-use clap::Parser;
+use clap::{ArgAction, Parser};
 use serde::{Deserialize, Serialize};
 use serde_with::{
     formats::CommaSeparator, serde_as, skip_serializing_none, BoolFromInt, PickFirst,
@@ -59,6 +59,10 @@ pub(crate) struct Flags {
     #[arg(skip)]
     #[serde_as(as = "Option<PickFirst<(_, BoolFromInt)>>")]
     pub(crate) ignore_orphans: Option<bool>,
+
+    /// Show the Podman commands that are executed
+    #[arg(short, long, action = ArgAction::SetTrue)]
+    pub(crate) verbose: Option<bool>,
 }
 
 fn main() -> Result<()> {

@@ -27,6 +27,7 @@ pub(crate) struct Config {
     pub(crate) profiles: Vec<String>,
     pub(crate) project_directory: PathBuf,
     pub(crate) ignore_orphans: bool,
+    pub(crate) verbose: bool,
 }
 
 fn find(directory: &Path, files: &[String]) -> Result<PathBuf> {
@@ -51,7 +52,7 @@ fn find(directory: &Path, files: &[String]) -> Result<PathBuf> {
 fn resolve(flags: &Flags) -> Result<Config> {
     let current_dir = env::current_dir()?;
     let flags = Figment::new()
-        .merge(Env::prefixed("COMPOSE_").ignore(&["env_file", "project_directory"]))
+        .merge(Env::prefixed("COMPOSE_").ignore(&["env_file", "project_directory", "verbose"]))
         .merge(Serialized::defaults(flags))
         .extract::<Flags>()?;
 
@@ -104,6 +105,7 @@ fn resolve(flags: &Flags) -> Result<Config> {
         profiles: flags.profile.unwrap_or_default(),
         project_directory,
         ignore_orphans: flags.ignore_orphans.unwrap_or_default(),
+        verbose: flags.verbose.unwrap_or_default(),
     })
 }
 

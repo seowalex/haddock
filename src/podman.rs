@@ -18,12 +18,14 @@ static PODMAN_MIN_SUPPORTED_VERSION: Lazy<semver::Version> =
 #[derive(Debug)]
 pub(crate) struct Podman {
     project_directory: PathBuf,
+    verbose: bool,
 }
 
 impl Podman {
-    pub(crate) fn new(project_directory: &Path) -> Result<Self> {
+    pub(crate) fn new(project_directory: &Path, verbose: bool) -> Result<Self> {
         let podman = Podman {
             project_directory: project_directory.to_path_buf(),
+            verbose,
         };
         let output = podman.output(["version", "--format", "json"])?;
         let version = serde_json::from_str::<Version>(&output)
@@ -41,7 +43,7 @@ impl Podman {
         Ok(podman)
     }
 
-    fn run<I, S>(&self, args: I) -> Command
+    fn command<I, S>(&self, args: I) -> Command
     where
         I: IntoIterator<Item = S>,
         S: AsRef<OsStr>,
@@ -52,23 +54,47 @@ impl Podman {
         command
     }
 
+    pub(crate) fn run<I, S>(&self, args: I) -> Result<()>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>,
+    {
+        self.output(args).map(|_| ())
+    }
+
     pub(crate) fn output<I, S>(&self, args: I) -> Result<String>
     where
         I: IntoIterator<Item = S>,
         S: AsRef<OsStr>,
     {
-        let mut command = self.run(args);
-        let output = command
-            .output()
-            .with_context(|| {
-                anyhow!(
-                    "`{} {}` cannot be executed",
+        let mut command = self.command(args);
+
+        let output = command.output().with_context(|| {
+            anyhow!(
+                "`{} {}` cannot be executed",
+                command.get_program().to_string_lossy(),
+                command.get_args().map(OsStr::to_string_lossy).join(" ")
+            )
+        })?;
+
+        if self.verbose {
+            println!(
+                "`{} {}`",
+                command.get_program().to_string_lossy(),
+                command.get_args().map(OsStr::to_string_lossy).join(" ")
+            )
+        }
+
+        if output.status.success() {
+            Ok(String::from_utf8_lossy(&output.stdout).to_string())
+        } else {
+            Err(
+                anyhow!("{}", String::from_utf8_lossy(&output.stderr)).context(anyhow!(
+                    "`{} {}` returned an error",
                     command.get_program().to_string_lossy(),
                     command.get_args().map(OsStr::to_string_lossy).join(" ")
-                )
-            })?
-            .stdout;
-
-        Ok(String::from_utf8_lossy(&output).to_string())
+                )),
+            )
+        }
     }
 }
