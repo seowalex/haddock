@@ -1,7 +1,7 @@
 use std::env;
 
 use anyhow::{bail, Result};
-use clap::ValueEnum;
+use clap::{crate_version, ValueEnum};
 use itertools::Itertools;
 use petgraph::{algo::tarjan_scc, graphmap::DiGraphMap};
 
@@ -147,77 +147,105 @@ pub(crate) fn run(args: Args, config: Config) -> Result<()> {
         );
     }
 
-    podman
-        .run([
-            "pod",
-            "create",
-            "--share",
-            "none",
-            "--label",
-            &format!("io.podman.compose.config-hash={}", file.digest()),
-            &env::var("COMPOSE_PROJECT_NAME")?,
-        ])
-        .ok();
+    let name = file.name.as_ref().unwrap();
+    let labels = [("version", crate_version!()), ("project", name)]
+        .into_iter()
+        .map(|label| format!("io.podman.compose.{}={}", label.0, label.1))
+        .collect::<Vec<_>>();
 
-    for (_, network) in file.networks {
-        if podman
-            .run(["network", "exists", network.name.as_ref().unwrap()])
-            .is_err()
-        {
+    if podman.run(["pod", "exists", name]).is_err() {
+        let pod_labels = [
+            (
+                "project.working_dir",
+                config.project_directory.to_string_lossy().as_ref(),
+            ),
+            (
+                "project.config_files",
+                &config
+                    .files
+                    .iter()
+                    .map(|file| file.to_string_lossy())
+                    .join(","),
+            ),
+            ("config-hash", &file.digest()),
+        ]
+        .into_iter()
+        .map(|label| format!("io.podman.compose.{}={}", label.0, label.1))
+        .collect::<Vec<_>>();
+
+        podman.run(
+            ["pod", "create", "--share", "none"]
+                .into_iter()
+                .chain(labels.iter().map(AsRef::as_ref))
+                .chain(pod_labels.iter().map(AsRef::as_ref)),
+        )?;
+    }
+
+    for network in file.networks.into_values() {
+        let name = network.name.as_ref().unwrap();
+
+        if podman.run(["network", "exists", name]).is_err() {
             if network.external.unwrap_or_default() {
-                bail!(
-                    "External network \"{}\" not found",
-                    network.name.as_ref().unwrap()
-                );
+                bail!("External network \"{name}\" not found");
             }
+
+            let network_labels = [("network", name)]
+                .into_iter()
+                .map(|label| format!("io.podman.compose.{}={}", label.0, label.1))
+                .collect::<Vec<_>>();
 
             podman.run(
                 ["network", "create"]
                     .into_iter()
-                    .map(String::from)
-                    .chain(network.to_args().into_iter()),
+                    .chain(labels.iter().map(AsRef::as_ref))
+                    .chain(network_labels.iter().map(AsRef::as_ref))
+                    .chain(network.to_args().iter().map(AsRef::as_ref)),
             )?;
         }
     }
 
-    for (_, volume) in file.volumes {
-        if podman
-            .run(["volume", "exists", volume.name.as_ref().unwrap()])
-            .is_err()
-        {
+    for volume in file.volumes.into_values() {
+        let name = volume.name.as_ref().unwrap();
+
+        if podman.run(["volume", "exists", name]).is_err() {
             if volume.external.unwrap_or_default() {
-                bail!(
-                    "External volume \"{}\" not found",
-                    volume.name.as_ref().unwrap()
-                );
+                bail!("External volume \"{name}\" not found");
             }
+
+            let volume_labels = [("volume", name)]
+                .into_iter()
+                .map(|label| format!("io.podman.compose.{}={}", label.0, label.1))
+                .collect::<Vec<_>>();
 
             podman.run(
                 ["volume", "create"]
                     .into_iter()
-                    .map(String::from)
-                    .chain(volume.to_args().into_iter()),
+                    .chain(labels.iter().map(AsRef::as_ref))
+                    .chain(volume_labels.iter().map(AsRef::as_ref))
+                    .chain(volume.to_args().iter().map(AsRef::as_ref)),
             )?;
         }
     }
 
-    for (_, secret) in file.secrets {
-        if podman
-            .run(["secret", "inspect", secret.name.as_ref().unwrap()])
-            .is_err()
-        {
+    for secret in file.secrets.into_values() {
+        let name = secret.name.as_ref().unwrap();
+
+        if podman.run(["secret", "inspect", name]).is_err() {
             if secret.external.unwrap_or_default() {
-                bail!(
-                    "External secret \"{}\" not found",
-                    secret.name.as_ref().unwrap()
-                );
+                bail!("External secret \"{name}\" not found");
             }
+
+            let secret_labels = [("secret", name)]
+                .into_iter()
+                .map(|label| format!("io.podman.compose.{}={}", label.0, label.1))
+                .collect::<Vec<_>>();
 
             podman.run(
                 ["secret", "create"]
                     .into_iter()
-                    .map(String::from)
-                    .chain(secret.to_args().into_iter()),
+                    .chain(labels.iter().map(AsRef::as_ref))
+                    .chain(secret_labels.iter().map(AsRef::as_ref))
+                    .chain(secret.to_args().iter().map(AsRef::as_ref)),
             )?;
         }
     }

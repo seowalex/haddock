@@ -1390,7 +1390,10 @@ serde_conv!(
 
         Ok(Device {
             source: Path::new(parts.next().unwrap()).absolutize()?.to_path_buf(),
-            target: parts.next().map(PathBuf::from).unwrap(),
+            target: parts
+                .next()
+                .map(PathBuf::from)
+                .ok_or_else(|| anyhow!("too little colons"))?,
             permissions: parts.next().map(ToString::to_string),
         })
     }

@@ -24,7 +24,7 @@ impl Podman {
             project_directory: config.project_directory.clone(),
             verbose: config.verbose,
         };
-        let output = podman.output(["version", "--format", "json"])?;
+        let output = podman.run(["version", "--format", "json"])?;
         let version = serde_json::from_str::<Version>(&output)
             .with_context(|| anyhow!("Podman version not recognised"))?
             .client
@@ -40,31 +40,13 @@ impl Podman {
         Ok(podman)
     }
 
-    fn command<I, S>(&self, args: I) -> Command
+    pub(crate) fn run<I, S>(&self, args: I) -> Result<String>
     where
         I: IntoIterator<Item = S>,
         S: AsRef<OsStr>,
     {
         let mut command = Command::new("podman");
         command.current_dir(&self.project_directory).args(args);
-
-        command
-    }
-
-    pub(crate) fn run<I, S>(&self, args: I) -> Result<()>
-    where
-        I: IntoIterator<Item = S>,
-        S: AsRef<OsStr>,
-    {
-        self.output(args).map(|_| ())
-    }
-
-    pub(crate) fn output<I, S>(&self, args: I) -> Result<String>
-    where
-        I: IntoIterator<Item = S>,
-        S: AsRef<OsStr>,
-    {
-        let mut command = self.command(args);
 
         let output = command.output().with_context(|| {
             anyhow!(

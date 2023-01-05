@@ -276,10 +276,7 @@ pub(crate) fn parse(config: &Config, no_interpolate: bool) -> Result<Compose> {
 
     for (name, network) in &mut combined_file.networks {
         network.name.get_or_insert_with(|| {
-            match (
-                network.external.unwrap_or_default(),
-                env::var("COMPOSE_PROJECT_NAME").ok(),
-            ) {
+            match (network.external.unwrap_or_default(), &combined_file.name) {
                 (false, Some(project_name)) => format!("{project_name}_{name}"),
                 _ => name.clone(),
             }
@@ -292,10 +289,7 @@ pub(crate) fn parse(config: &Config, no_interpolate: bool) -> Result<Compose> {
 
     for (name, volume) in &mut combined_file.volumes {
         volume.name.get_or_insert_with(|| {
-            match (
-                volume.external.unwrap_or_default(),
-                env::var("COMPOSE_PROJECT_NAME").ok(),
-            ) {
+            match (volume.external.unwrap_or_default(), &combined_file.name) {
                 (false, Some(project_name)) => format!("{project_name}_{name}"),
                 _ => name.clone(),
             }
@@ -308,10 +302,7 @@ pub(crate) fn parse(config: &Config, no_interpolate: bool) -> Result<Compose> {
 
     for (name, secret) in &mut combined_file.secrets {
         secret.name.get_or_insert_with(|| {
-            match (
-                secret.external.unwrap_or_default(),
-                env::var("COMPOSE_PROJECT_NAME").ok(),
-            ) {
+            match (secret.external.unwrap_or_default(), &combined_file.name) {
                 (false, Some(project_name)) => format!("{project_name}_{name}"),
                 _ => name.clone(),
             }
@@ -379,16 +370,17 @@ pub(crate) fn parse(config: &Config, no_interpolate: bool) -> Result<Compose> {
         }
 
         for label in service.labels.keys() {
-            if label.starts_with("com.docker.compose") || label.starts_with("io.podman.compose") {
-                bail!("Service \"name\" cannot have labels starting with \"com.docker.compose\" or \"io.podman.compose\"");
+            if label.starts_with("io.podman.compose") {
+                bail!("Service \"name\" cannot have labels starting with \"io.podman.compose\"");
             }
         }
 
         if let Some(build) = &service.build {
             for label in build.labels.keys() {
-                if label.starts_with("com.docker.compose") || label.starts_with("io.podman.compose")
-                {
-                    bail!("Service \"name\" cannot have labels starting with \"com.docker.compose\" or \"io.podman.compose\"");
+                if label.starts_with("io.podman.compose") {
+                    bail!(
+                        "Service \"name\" cannot have labels starting with \"io.podman.compose\""
+                    );
                 }
             }
         }
@@ -441,8 +433,8 @@ pub(crate) fn parse(config: &Config, no_interpolate: bool) -> Result<Compose> {
         }
 
         for label in network.labels.keys() {
-            if label.starts_with("com.docker.compose") || label.starts_with("io.podman.compose") {
-                bail!("Network \"name\" cannot have labels starting with \"com.docker.compose\" or \"io.podman.compose\"");
+            if label.starts_with("io.podman.compose") {
+                bail!("Network \"name\" cannot have labels starting with \"io.podman.compose\"");
             }
         }
     }
@@ -457,8 +449,8 @@ pub(crate) fn parse(config: &Config, no_interpolate: bool) -> Result<Compose> {
         }
 
         for label in volume.labels.keys() {
-            if label.starts_with("com.docker.compose") || label.starts_with("io.podman.compose") {
-                bail!("Volume \"name\" cannot have labels starting with \"com.docker.compose\" or \"io.podman.compose\"");
+            if label.starts_with("io.podman.compose") {
+                bail!("Volume \"name\" cannot have labels starting with \"io.podman.compose\"");
             }
         }
     }
