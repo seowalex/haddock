@@ -1,10 +1,11 @@
 mod types;
 
-use std::{ffi::OsStr, path::PathBuf, process::Command};
+use std::{ffi::OsStr, path::PathBuf};
 
 use anyhow::{anyhow, bail, Context, Result};
 use itertools::Itertools;
 use once_cell::sync::Lazy;
+use tokio::process::Command;
 
 use self::types::Version;
 use crate::config::Config;
@@ -19,12 +20,12 @@ pub(crate) struct Podman {
 }
 
 impl Podman {
-    pub(crate) fn new(config: &Config) -> Result<Self> {
+    pub(crate) async fn new(config: &Config) -> Result<Self> {
         let podman = Podman {
             project_directory: config.project_directory.clone(),
             verbose: config.verbose,
         };
-        let output = podman.run(["version", "--format", "json"])?;
+        let output = podman.run(["version", "--format", "json"]).await?;
         let version = serde_json::from_str::<Version>(&output)
             .with_context(|| anyhow!("Podman version not recognised"))?
             .client
@@ -40,7 +41,7 @@ impl Podman {
         Ok(podman)
     }
 
-    pub(crate) fn run<I, S>(&self, args: I) -> Result<String>
+    pub(crate) async fn run<I, S>(&self, args: I) -> Result<String>
     where
         I: IntoIterator<Item = S>,
         S: AsRef<OsStr>,
@@ -48,19 +49,27 @@ impl Podman {
         let mut command = Command::new("podman");
         command.current_dir(&self.project_directory).args(args);
 
-        let output = command.output().with_context(|| {
+        let output = command.output().await.with_context(|| {
             anyhow!(
                 "`{} {}` cannot be executed",
-                command.get_program().to_string_lossy(),
-                command.get_args().map(OsStr::to_string_lossy).join(" ")
+                command.as_std().get_program().to_string_lossy(),
+                command
+                    .as_std()
+                    .get_args()
+                    .map(OsStr::to_string_lossy)
+                    .join(" ")
             )
         })?;
 
         if self.verbose {
             println!(
                 "`{} {}`",
-                command.get_program().to_string_lossy(),
-                command.get_args().map(OsStr::to_string_lossy).join(" ")
+                command.as_std().get_program().to_string_lossy(),
+                command
+                    .as_std()
+                    .get_args()
+                    .map(OsStr::to_string_lossy)
+                    .join(" ")
             )
         }
 
@@ -70,8 +79,12 @@ impl Podman {
             Err(
                 anyhow!("{}", String::from_utf8_lossy(&output.stderr)).context(anyhow!(
                     "`{} {}` returned an error",
-                    command.get_program().to_string_lossy(),
-                    command.get_args().map(OsStr::to_string_lossy).join(" ")
+                    command.as_std().get_program().to_string_lossy(),
+                    command
+                        .as_std()
+                        .get_args()
+                        .map(OsStr::to_string_lossy)
+                        .join(" ")
                 )),
             )
         }

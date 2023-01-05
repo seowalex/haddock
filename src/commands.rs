@@ -14,12 +14,12 @@ pub(crate) enum Command {
     Version(version::Args),
 }
 
-pub(crate) fn run(command: Command, config: Config) -> Result<()> {
+pub(crate) async fn run(command: Command, config: Config) -> Result<()> {
     match command {
-        Command::Up(args) => up::run(args, config),
-        Command::Convert(args) => convert::run(args, config),
+        Command::Up(args) => up::run(args, config).await?,
+        Command::Convert(args) => convert::run(args, config)?,
         Command::Version(args) => version::run(args),
-    }?;
+    };
 
     Ok(())
 }

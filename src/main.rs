@@ -65,12 +65,11 @@ pub(crate) struct Flags {
     pub(crate) verbose: Option<bool>,
 }
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     let args = Args::parse();
     let config = config::load(args.flags)?;
 
     env::set_current_dir(&config.project_directory)?;
-    commands::run(args.command, config)?;
-
-    Ok(())
+    commands::run(args.command, config).await
 }

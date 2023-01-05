@@ -1,4 +1,3 @@
-use anyhow::Result;
 use clap::{crate_name, crate_version, ValueEnum};
 use serde_json::json;
 
@@ -21,7 +20,7 @@ enum Format {
     Json,
 }
 
-pub(crate) fn run(args: Args) -> Result<()> {
+pub(crate) fn run(args: Args) {
     if args.short {
         println!(crate_version!());
     } else {
@@ -30,6 +29,4 @@ pub(crate) fn run(args: Args) -> Result<()> {
             Format::Json => println!("{}", json!({ "version": crate_version!() })),
         }
     }
-
-    Ok(())
 }
