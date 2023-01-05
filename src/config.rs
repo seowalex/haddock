@@ -25,6 +25,7 @@ pub(crate) struct Config {
     pub(crate) project_name: Option<String>,
     pub(crate) files: Vec<PathBuf>,
     pub(crate) profiles: Vec<String>,
+    pub(crate) env_file: PathBuf,
     pub(crate) project_directory: PathBuf,
     pub(crate) ignore_orphans: bool,
     pub(crate) verbose: bool,
@@ -106,6 +107,7 @@ fn resolve(flags: &Flags) -> Result<Config> {
         project_directory,
         ignore_orphans: flags.ignore_orphans.unwrap_or_default(),
         verbose: flags.verbose.unwrap_or_default(),
+        ..Config::default()
     })
 }
 
@@ -125,5 +127,9 @@ pub(crate) fn load(flags: Flags) -> Result<Config> {
                 Ok(())
             }
         })?;
-    resolve(&flags)
+
+    let mut config = resolve(&flags)?;
+    config.env_file = env_file;
+
+    Ok(config)
 }

@@ -167,6 +167,10 @@ pub(crate) fn run(args: Args, config: Config) -> Result<()> {
                     .map(|file| file.to_string_lossy())
                     .join(","),
             ),
+            (
+                "project.environment_file",
+                config.env_file.to_string_lossy().as_ref(),
+            ),
             ("config-hash", &file.digest()),
         ]
         .into_iter()
@@ -176,8 +180,9 @@ pub(crate) fn run(args: Args, config: Config) -> Result<()> {
         podman.run(
             ["pod", "create", "--share", "none"]
                 .into_iter()
-                .chain(labels.iter().map(AsRef::as_ref))
-                .chain(pod_labels.iter().map(AsRef::as_ref)),
+                .chain(labels.iter().flat_map(|label| ["--label", label]))
+                .chain(pod_labels.iter().flat_map(|label| ["--label", label]))
+                .chain([name.as_ref()]),
         )?;
     }
 
@@ -197,8 +202,8 @@ pub(crate) fn run(args: Args, config: Config) -> Result<()> {
             podman.run(
                 ["network", "create"]
                     .into_iter()
-                    .chain(labels.iter().map(AsRef::as_ref))
-                    .chain(network_labels.iter().map(AsRef::as_ref))
+                    .chain(labels.iter().flat_map(|label| ["--label", label]))
+                    .chain(network_labels.iter().flat_map(|label| ["--label", label]))
                     .chain(network.to_args().iter().map(AsRef::as_ref)),
             )?;
         }
@@ -220,8 +225,8 @@ pub(crate) fn run(args: Args, config: Config) -> Result<()> {
             podman.run(
                 ["volume", "create"]
                     .into_iter()
-                    .chain(labels.iter().map(AsRef::as_ref))
-                    .chain(volume_labels.iter().map(AsRef::as_ref))
+                    .chain(labels.iter().flat_map(|label| ["--label", label]))
+                    .chain(volume_labels.iter().flat_map(|label| ["--label", label]))
                     .chain(volume.to_args().iter().map(AsRef::as_ref)),
             )?;
         }
@@ -243,8 +248,8 @@ pub(crate) fn run(args: Args, config: Config) -> Result<()> {
             podman.run(
                 ["secret", "create"]
                     .into_iter()
-                    .chain(labels.iter().map(AsRef::as_ref))
-                    .chain(secret_labels.iter().map(AsRef::as_ref))
+                    .chain(labels.iter().flat_map(|label| ["--label", label]))
+                    .chain(secret_labels.iter().flat_map(|label| ["--label", label]))
                     .chain(secret.to_args().iter().map(AsRef::as_ref)),
             )?;
         }
