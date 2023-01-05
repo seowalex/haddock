@@ -1,8 +1,9 @@
-use std::env;
+use std::{env, fmt::Write, time::Duration};
 
 use anyhow::{bail, Result};
 use clap::{crate_version, ValueEnum};
 use futures::{stream::FuturesUnordered, try_join, TryStreamExt};
+use indicatif::{ProgressBar, ProgressState, ProgressStyle};
 use itertools::Itertools;
 use petgraph::{algo::tarjan_scc, graphmap::DiGraphMap};
 
@@ -119,11 +120,16 @@ enum PullPolicy {
 
 async fn create_pod(
     podman: &Podman,
+    config: &Config,
     file: &Compose,
     labels: &[String],
-    config: &Config,
     name: &str,
 ) -> Result<()> {
+    let spinner = podman.add_spinner();
+
+    spinner.set_prefix(format!("Pod {name}"));
+    spinner.set_message("Creating");
+
     if podman.run(["pod", "exists", name]).await.is_err() {
         let pod_labels = [
             (
@@ -157,6 +163,10 @@ async fn create_pod(
                     .chain([name]),
             )
             .await?;
+
+        spinner.finish_with_message("Created");
+    } else {
+        spinner.finish_with_message("Exists");
     }
 
     Ok(())
@@ -167,6 +177,10 @@ async fn create_networks(podman: &Podman, file: &Compose, labels: &[String]) -> 
         .values()
         .map(|network| async {
             let name = network.name.as_ref().unwrap();
+            let spinner = podman.add_spinner();
+
+            spinner.set_prefix(format!("Network {name}"));
+            spinner.set_message("Creating");
 
             if podman.run(["network", "exists", name]).await.is_err() {
                 if network.external.unwrap_or_default() {
@@ -187,6 +201,10 @@ async fn create_networks(podman: &Podman, file: &Compose, labels: &[String]) -> 
                             .chain(network.to_args().iter().map(AsRef::as_ref)),
                     )
                     .await?;
+
+                spinner.finish_with_message("Created");
+            } else {
+                spinner.finish_with_message("Exists");
             }
 
             Ok(())
@@ -202,6 +220,10 @@ async fn create_volumes(podman: &Podman, file: &Compose, labels: &[String]) -> R
         .values()
         .map(|volume| async {
             let name = volume.name.as_ref().unwrap();
+            let spinner = podman.add_spinner();
+
+            spinner.set_prefix(format!("Volume {name}"));
+            spinner.set_message("Creating");
 
             if podman.run(["volume", "exists", name]).await.is_err() {
                 if volume.external.unwrap_or_default() {
@@ -222,6 +244,10 @@ async fn create_volumes(podman: &Podman, file: &Compose, labels: &[String]) -> R
                             .chain(volume.to_args().iter().map(AsRef::as_ref)),
                     )
                     .await?;
+
+                spinner.finish_with_message("Created");
+            } else {
+                spinner.finish_with_message("Exists");
             }
 
             Ok(())
@@ -237,6 +263,10 @@ async fn create_secrets(podman: &Podman, file: &Compose, labels: &[String]) -> R
         .values()
         .map(|secret| async {
             let name = secret.name.as_ref().unwrap();
+            let spinner = podman.add_spinner();
+
+            spinner.set_prefix(format!("Secret {name}"));
+            spinner.set_message("Creating");
 
             if podman.run(["secret", "inspect", name]).await.is_err() {
                 if secret.external.unwrap_or_default() {
@@ -257,6 +287,10 @@ async fn create_secrets(podman: &Podman, file: &Compose, labels: &[String]) -> R
                             .chain(secret.to_args().iter().map(AsRef::as_ref)),
                     )
                     .await?;
+
+                spinner.finish_with_message("Created");
+            } else {
+                spinner.finish_with_message("Exists");
             }
 
             Ok(())
@@ -309,7 +343,7 @@ pub(crate) async fn run(args: Args, config: Config) -> Result<()> {
     let podman = podman.await?;
 
     try_join!(
-        create_pod(&podman, &file, &labels, &config, name),
+        create_pod(&podman, &config, &file, &labels, name),
         create_networks(&podman, &file, &labels),
         create_volumes(&podman, &file, &labels),
         create_secrets(&podman, &file, &labels)

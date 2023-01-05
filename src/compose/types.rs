@@ -20,9 +20,8 @@ use serde_with::{
 };
 use serde_yaml::Value;
 use sha2::{Digest, Sha256};
-use yansi::Paint;
 
-use crate::utils::{DisplayFromAny, DuplicateInsertsLastWinsSet};
+use crate::utils::{DisplayFromAny, DuplicateInsertsLastWinsSet, STYLED_WARNING};
 
 #[skip_serializing_none]
 #[serde_as]
@@ -1756,7 +1755,7 @@ serde_conv!(
         if !unused.is_empty() {
             eprintln!(
                 "{} Unsupported/unknown mount options: {}",
-                Paint::yellow("Warning:").bold(),
+                *STYLED_WARNING,
                 unused.join(", ")
             );
         }

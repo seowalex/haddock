@@ -1,7 +1,16 @@
-use std::{env, error::Error, fmt, hash::Hash, marker::PhantomData, str::FromStr};
+use std::{
+    env,
+    error::Error,
+    fmt::{self, Formatter},
+    hash::Hash,
+    marker::PhantomData,
+    str::FromStr,
+};
 
 use anyhow::{anyhow, Result};
+use console::{style, StyledObject};
 use indexmap::IndexSet;
+use once_cell::sync::Lazy;
 use serde::{
     de::{self, SeqAccess, Visitor},
     Deserializer, Serialize, Serializer,
@@ -9,7 +18,9 @@ use serde::{
 use serde_with::{
     de::DeserializeAsWrap, formats::Separator, ser::SerializeAsWrap, DeserializeAs, SerializeAs,
 };
-use yansi::Paint;
+
+pub(crate) static STYLED_WARNING: Lazy<StyledObject<&str>> =
+    Lazy::new(|| style("Warning:").yellow().bold());
 
 pub(crate) fn parse_key_val<T, U>(s: &str) -> Result<(T, U)>
 where
@@ -21,8 +32,8 @@ where
     let pos = s.find('=').ok_or_else(|| {
         anyhow!(
             "no '{}' found in '{}'",
-            Paint::yellow('='),
-            Paint::yellow(s)
+            style("=").yellow(),
+            style(s).yellow()
         )
     })?;
 
@@ -56,7 +67,7 @@ where
         {
             type Value = T;
 
-            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+            fn expecting(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
                 formatter.write_str("a displayable type")
             }
 
@@ -132,7 +143,7 @@ where
         {
             type Value = IndexSet<T>;
 
-            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+            fn expecting(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
                 formatter.write_str("a sequence")
             }
 

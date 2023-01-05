@@ -2,7 +2,8 @@ mod parser;
 pub(crate) mod types;
 
 use std::{
-    env, fs,
+    env::{self, VarError},
+    fs,
     io::{self, Read},
 };
 
@@ -11,13 +12,15 @@ use indexmap::IndexSet;
 use itertools::Itertools;
 use path_absolutize::Absolutize;
 use serde_yaml::Value;
-use yansi::Paint;
 
 use self::{
     parser::{State, Token, Var},
     types::{Compose, ServiceVolumeType},
 };
-use crate::{config::Config, utils::regex};
+use crate::{
+    config::Config,
+    utils::{regex, STYLED_WARNING},
+};
 
 fn evaluate(tokens: Vec<Token>) -> Result<String> {
     tokens
@@ -29,7 +32,7 @@ fn evaluate(tokens: Vec<Token>) -> Result<String> {
                     State::Set => env::var(name),
                     State::SetAndNonEmpty => env::var(name).and_then(|var| {
                         if var.is_empty() {
-                            Err(env::VarError::NotPresent)
+                            Err(VarError::NotPresent)
                         } else {
                             Ok(var)
                         }
@@ -40,7 +43,7 @@ fn evaluate(tokens: Vec<Token>) -> Result<String> {
                     State::Set => env::var(&name),
                     State::SetAndNonEmpty => env::var(&name).and_then(|var| {
                         if var.is_empty() {
-                            Err(env::VarError::NotPresent)
+                            Err(VarError::NotPresent)
                         } else {
                             Ok(var)
                         }
@@ -59,7 +62,7 @@ fn evaluate(tokens: Vec<Token>) -> Result<String> {
                     State::Set => env::var(name),
                     State::SetAndNonEmpty => env::var(name).and_then(|var| {
                         if var.is_empty() {
-                            Err(env::VarError::NotPresent)
+                            Err(VarError::NotPresent)
                         } else {
                             Ok(var)
                         }
@@ -69,7 +72,7 @@ fn evaluate(tokens: Vec<Token>) -> Result<String> {
                 None => Ok(env::var(&name).unwrap_or_else(|_| {
                     eprintln!(
                         "{} The \"{name}\" variable is not set, defaulting to a blank string",
-                        Paint::yellow("Warning:").bold()
+                        *STYLED_WARNING
                     );
 
                     String::new()
@@ -218,7 +221,7 @@ pub(crate) fn parse(config: &Config, no_interpolate: bool) -> Result<Compose> {
         if !unused.is_empty() {
             eprintln!(
                 "{} Unsupported/unknown properties in {}: {}",
-                Paint::yellow("Warning:").bold(),
+                *STYLED_WARNING,
                 path.display(),
                 unused.into_iter().join(", ")
             );
@@ -313,35 +316,35 @@ pub(crate) fn parse(config: &Config, no_interpolate: bool) -> Result<Compose> {
         if service.scale.is_some() {
             eprintln!(
                 "{} `scale` is deprecated, use the `deploy.replicas` element instead",
-                Paint::yellow("Warning:").bold()
+                *STYLED_WARNING
             );
         }
 
         if service.mem_limit.is_some() {
             eprintln!(
                 "{} `mem_limit` is deprecated, use the `deploy.limits.memory` element instead",
-                Paint::yellow("Warning:").bold()
+                *STYLED_WARNING
             );
         }
 
         if service.cpus.is_some() {
             eprintln!(
                 "{} `cpus` is deprecated, use the `deploy.reservations.cpus` element instead",
-                Paint::yellow("Warning:").bold()
+                *STYLED_WARNING
             );
         }
 
         if service.mem_reservation.is_some() {
             eprintln!(
                 "{} `mem_reservation` is deprecated, use the `deploy.reservations.memory` element instead",
-                Paint::yellow("Warning:").bold()
+                *STYLED_WARNING
             );
         }
 
         if service.pids_limit.is_some() {
             eprintln!(
                 "{} `pids_limit` is deprecated, use the `deploy.reservations.pids` element instead",
-                Paint::yellow("Warning:").bold()
+                *STYLED_WARNING
             );
         }
 
