@@ -1,9 +1,7 @@
 use std::{fmt::Write, time::Duration};
 
 use console::style;
-use indicatif::{
-    MultiProgress, ProgressBar, ProgressDrawTarget, ProgressFinish, ProgressState, ProgressStyle,
-};
+use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressState, ProgressStyle};
 use once_cell::sync::Lazy;
 
 use crate::config::Config;
@@ -30,11 +28,7 @@ impl Progress {
         } else {
             ProgressDrawTarget::stderr()
         });
-        let header = progress.add(
-            ProgressBar::new(0)
-                .with_style(HEADER_STYLE.clone())
-                .with_finish(ProgressFinish::AndLeave),
-        );
+        let header = progress.add(ProgressBar::new(0).with_style(HEADER_STYLE.clone()));
         let spinner_style = ProgressStyle::with_template(&format!(
             " {{spinner:.blue}} {{prefix:{}.blue}}  {{wide_msg:.blue}} {{elapsed:.blue}} ",
             width

@@ -769,7 +769,7 @@ pub(crate) struct Dependency {
     pub(crate) condition: Condition,
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub(crate) enum Condition {
     #[serde(rename = "service_started")]
     Started,

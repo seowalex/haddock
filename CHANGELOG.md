@@ -10,8 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `docker compose` flags.
+- `up` command.
 - `convert` command.
 - `help` command.
 - `version` command.
+- Nice progress indicators.
 - Compose file (de)serialisation.
 - Compose file value interpolation.

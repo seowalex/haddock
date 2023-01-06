@@ -1,4 +1,4 @@
-use std::env;
+use std::{env, mem};
 
 use anyhow::{bail, Result};
 use clap::{crate_version, ValueEnum};
@@ -10,7 +10,7 @@ use tap::Tap;
 use crate::{
     compose::{
         self,
-        types::{Compose, Condition},
+        types::{Compose, FileReference, ServiceVolume, ServiceVolumeType},
     },
     config::Config,
     podman::Podman,
@@ -354,21 +354,21 @@ async fn create_secrets(
 
 pub(crate) async fn run(args: Args, config: Config) -> Result<()> {
     let podman = Podman::new(&config);
-    let file = compose::parse(&config, false)?;
+    let mut file = compose::parse(&config, false)?;
     let mut dependencies = DiGraphMap::new();
 
     for (to, service) in &file.services {
         dependencies.extend(
             service
                 .depends_on
-                .iter()
-                .map(|(from, dependency)| (from.as_str(), to.as_str(), dependency.condition)),
+                .keys()
+                .map(|from| (from.as_str(), to.as_str(), ())),
         );
         dependencies.extend(
             service
                 .links
-                .iter()
-                .map(|(from, _)| (from.as_str(), to.as_str(), Condition::Started)),
+                .keys()
+                .map(|from| (from.as_str(), to.as_str(), ())),
         );
     }
 
@@ -425,6 +425,34 @@ pub(crate) async fn run(args: Args, config: Config) -> Result<()> {
         create_volumes(&podman, &progress, &file, &labels),
         create_secrets(&podman, &progress, &file, &labels)
     )?;
+
+    progress.header.finish();
+
+    for service in file.services.values_mut() {
+        service.networks = mem::take(&mut service.networks)
+            .into_iter()
+            .map(|(name, network)| (file.networks[&name].name.clone().unwrap(), network))
+            .collect();
+
+        service.volumes = mem::take(&mut service.volumes)
+            .into_iter()
+            .map(|volume| match volume.r#type {
+                ServiceVolumeType::Volume(Some(source)) => ServiceVolume {
+                    r#type: ServiceVolumeType::Volume(file.volumes[&source].name.clone()),
+                    ..volume
+                },
+                _ => volume,
+            })
+            .collect();
+
+        service.secrets = mem::take(&mut service.secrets)
+            .into_iter()
+            .map(|secret| FileReference {
+                source: file.secrets[&secret.source].name.clone().unwrap(),
+                ..secret
+            })
+            .collect();
+    }
 
     Ok(())
 }
