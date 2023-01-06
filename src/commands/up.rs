@@ -5,6 +5,7 @@ use clap::{crate_version, ValueEnum};
 use futures::{stream::FuturesUnordered, try_join, TryStreamExt};
 use itertools::Itertools;
 use petgraph::{algo::tarjan_scc, graphmap::DiGraphMap};
+use tap::Tap;
 
 use crate::{
     compose::{
@@ -165,7 +166,13 @@ async fn create_pod(
                     .chain(pod_labels.iter().flat_map(|label| ["--label", label]))
                     .chain([name]),
             )
-            .await?;
+            .await
+            .tap(|result| {
+                spinner.finish_with_message(match result {
+                    Ok(_) => "Created",
+                    Err(_) => "Error",
+                })
+            })?;
 
         spinner.finish_with_message("Created");
     } else {
@@ -212,9 +219,13 @@ async fn create_networks(
                             .chain(network_labels.iter().flat_map(|label| ["--label", label]))
                             .chain(network.to_args().iter().map(AsRef::as_ref)),
                     )
-                    .await?;
-
-                spinner.finish_with_message("Created");
+                    .await
+                    .tap(|result| {
+                        spinner.finish_with_message(match result {
+                            Ok(_) => "Created",
+                            Err(_) => "Error",
+                        })
+                    })?;
             } else {
                 spinner.finish_with_message("Exists");
             }
@@ -264,9 +275,13 @@ async fn create_volumes(
                             .chain(volume_labels.iter().flat_map(|label| ["--label", label]))
                             .chain(volume.to_args().iter().map(AsRef::as_ref)),
                     )
-                    .await?;
-
-                spinner.finish_with_message("Created");
+                    .await
+                    .tap(|result| {
+                        spinner.finish_with_message(match result {
+                            Ok(_) => "Created",
+                            Err(_) => "Error",
+                        })
+                    })?;
             } else {
                 spinner.finish_with_message("Exists");
             }
@@ -316,9 +331,13 @@ async fn create_secrets(
                             .chain(secret_labels.iter().flat_map(|label| ["--label", label]))
                             .chain(secret.to_args().iter().map(AsRef::as_ref)),
                     )
-                    .await?;
-
-                spinner.finish_with_message("Created");
+                    .await
+                    .tap(|result| {
+                        spinner.finish_with_message(match result {
+                            Ok(_) => "Created",
+                            Err(_) => "Error",
+                        })
+                    })?;
             } else {
                 spinner.finish_with_message("Exists");
             }
