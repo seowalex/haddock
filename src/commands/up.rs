@@ -13,6 +13,7 @@ use crate::{
     },
     config::Config,
     podman::Podman,
+    progress::Progress,
     utils::parse_key_val,
 };
 
@@ -119,12 +120,15 @@ enum PullPolicy {
 
 async fn create_pod(
     podman: &Podman,
+    progress: &Progress,
     config: &Config,
     file: &Compose,
     labels: &[String],
     name: &str,
 ) -> Result<()> {
-    let spinner = podman.add_spinner();
+    progress.header.inc_length(1);
+
+    let spinner = progress.add_spinner();
 
     spinner.set_prefix(format!("Pod {name}"));
     spinner.set_message("Creating");
@@ -168,15 +172,24 @@ async fn create_pod(
         spinner.finish_with_message("Exists");
     }
 
+    progress.header.inc(1);
+
     Ok(())
 }
 
-async fn create_networks(podman: &Podman, file: &Compose, labels: &[String]) -> Result<()> {
+async fn create_networks(
+    podman: &Podman,
+    progress: &Progress,
+    file: &Compose,
+    labels: &[String],
+) -> Result<()> {
     file.networks
         .values()
         .map(|network| async {
+            progress.header.inc_length(1);
+
             let name = network.name.as_ref().unwrap();
-            let spinner = podman.add_spinner();
+            let spinner = progress.add_spinner();
 
             spinner.set_prefix(format!("Network {name}"));
             spinner.set_message("Creating");
@@ -206,6 +219,8 @@ async fn create_networks(podman: &Podman, file: &Compose, labels: &[String]) -> 
                 spinner.finish_with_message("Exists");
             }
 
+            progress.header.inc(1);
+
             Ok(())
         })
         .collect::<FuturesUnordered<_>>()
@@ -214,12 +229,19 @@ async fn create_networks(podman: &Podman, file: &Compose, labels: &[String]) -> 
         .map(|_| ())
 }
 
-async fn create_volumes(podman: &Podman, file: &Compose, labels: &[String]) -> Result<()> {
+async fn create_volumes(
+    podman: &Podman,
+    progress: &Progress,
+    file: &Compose,
+    labels: &[String],
+) -> Result<()> {
     file.volumes
         .values()
         .map(|volume| async {
+            progress.header.inc_length(1);
+
             let name = volume.name.as_ref().unwrap();
-            let spinner = podman.add_spinner();
+            let spinner = progress.add_spinner();
 
             spinner.set_prefix(format!("Volume {name}"));
             spinner.set_message("Creating");
@@ -249,6 +271,8 @@ async fn create_volumes(podman: &Podman, file: &Compose, labels: &[String]) -> R
                 spinner.finish_with_message("Exists");
             }
 
+            progress.header.inc(1);
+
             Ok(())
         })
         .collect::<FuturesUnordered<_>>()
@@ -257,12 +281,19 @@ async fn create_volumes(podman: &Podman, file: &Compose, labels: &[String]) -> R
         .map(|_| ())
 }
 
-async fn create_secrets(podman: &Podman, file: &Compose, labels: &[String]) -> Result<()> {
+async fn create_secrets(
+    podman: &Podman,
+    progress: &Progress,
+    file: &Compose,
+    labels: &[String],
+) -> Result<()> {
     file.secrets
         .values()
         .map(|secret| async {
+            progress.header.inc_length(1);
+
             let name = secret.name.as_ref().unwrap();
-            let spinner = podman.add_spinner();
+            let spinner = progress.add_spinner();
 
             spinner.set_prefix(format!("Secret {name}"));
             spinner.set_message("Creating");
@@ -292,6 +323,8 @@ async fn create_secrets(podman: &Podman, file: &Compose, labels: &[String]) -> R
                 spinner.finish_with_message("Exists");
             }
 
+            progress.header.inc(1);
+
             Ok(())
         })
         .collect::<FuturesUnordered<_>>()
@@ -302,6 +335,7 @@ async fn create_secrets(podman: &Podman, file: &Compose, labels: &[String]) -> R
 
 pub(crate) async fn run(args: Args, config: Config) -> Result<()> {
     let podman = Podman::new(&config);
+    let progress = Progress::new(&config);
     let file = compose::parse(&config, false)?;
     let mut dependencies = DiGraphMap::new();
 
@@ -342,10 +376,10 @@ pub(crate) async fn run(args: Args, config: Config) -> Result<()> {
     let podman = podman.await?;
 
     try_join!(
-        create_pod(&podman, &config, &file, &labels, name),
-        create_networks(&podman, &file, &labels),
-        create_volumes(&podman, &file, &labels),
-        create_secrets(&podman, &file, &labels)
+        create_pod(&podman, &progress, &config, &file, &labels, name),
+        create_networks(&podman, &progress, &file, &labels),
+        create_volumes(&podman, &progress, &file, &labels),
+        create_secrets(&podman, &progress, &file, &labels)
     )?;
 
     Ok(())

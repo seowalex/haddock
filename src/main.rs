@@ -2,6 +2,7 @@ mod commands;
 mod compose;
 mod config;
 mod podman;
+mod progress;
 mod utils;
 
 use std::{env, path::PathBuf};

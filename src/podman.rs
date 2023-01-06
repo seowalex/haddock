@@ -1,9 +1,8 @@
 mod types;
 
-use std::{ffi::OsStr, fmt::Write, path::PathBuf, time::Duration};
+use std::{ffi::OsStr, path::PathBuf};
 
 use anyhow::{anyhow, bail, Context, Result};
-use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressState, ProgressStyle};
 use itertools::Itertools;
 use once_cell::sync::Lazy;
 use tokio::process::Command;
@@ -13,32 +12,16 @@ use crate::config::Config;
 
 static PODMAN_MIN_SUPPORTED_VERSION: Lazy<semver::Version> =
     Lazy::new(|| semver::Version::new(4, 3, 0));
-static SPINNER_STYLE: Lazy<ProgressStyle> = Lazy::new(|| {
-    ProgressStyle::with_template(
-        " {spinner:.blue} {prefix:.blue} {wide_msg:.blue} {elapsed:.blue} ",
-    )
-    .unwrap()
-    .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏", "⠿"])
-    .with_key("elapsed", |state: &ProgressState, w: &mut dyn Write| {
-        write!(w, "{:.1}s", state.elapsed().as_secs_f64()).unwrap()
-    })
-});
 
 #[derive(Debug)]
 pub(crate) struct Podman {
-    pub(crate) progress: MultiProgress,
     project_directory: PathBuf,
     dry_run: bool,
 }
 
 impl Podman {
     pub(crate) async fn new(config: &Config) -> Result<Self> {
-        let podman = Podman {
-            progress: MultiProgress::with_draw_target(if config.dry_run {
-                ProgressDrawTarget::hidden()
-            } else {
-                ProgressDrawTarget::stderr()
-            }),
+        let podman = Self {
             project_directory: config.project_directory.clone(),
             dry_run: config.dry_run,
         };
@@ -112,14 +95,5 @@ impl Podman {
                 )),
             )
         }
-    }
-
-    pub(crate) fn add_spinner(&self) -> ProgressBar {
-        let spinner = self.progress.add(ProgressBar::new(0));
-
-        spinner.enable_steady_tick(Duration::from_millis(100));
-        spinner.set_style(SPINNER_STYLE.clone());
-
-        spinner
     }
 }
