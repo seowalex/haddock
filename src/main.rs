@@ -60,9 +60,9 @@ pub(crate) struct Flags {
     #[serde_as(as = "Option<PickFirst<(_, BoolFromInt)>>")]
     pub(crate) ignore_orphans: Option<bool>,
 
-    /// Show the Podman commands that are executed
-    #[arg(short, long, action = ArgAction::SetTrue)]
-    pub(crate) verbose: Option<bool>,
+    /// Only show the Podman commands that will be executed
+    #[arg(long, action = ArgAction::SetTrue)]
+    pub(crate) dry_run: Option<bool>,
 }
 
 #[tokio::main]

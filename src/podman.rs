@@ -3,7 +3,7 @@ mod types;
 use std::{ffi::OsStr, fmt::Write, path::PathBuf, time::Duration};
 
 use anyhow::{anyhow, bail, Context, Result};
-use indicatif::{MultiProgress, ProgressBar, ProgressState, ProgressStyle};
+use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressState, ProgressStyle};
 use itertools::Itertools;
 use once_cell::sync::Lazy;
 use tokio::process::Command;
@@ -28,17 +28,21 @@ static SPINNER_STYLE: Lazy<ProgressStyle> = Lazy::new(|| {
 pub(crate) struct Podman {
     pub(crate) progress: MultiProgress,
     project_directory: PathBuf,
-    verbose: bool,
+    dry_run: bool,
 }
 
 impl Podman {
     pub(crate) async fn new(config: &Config) -> Result<Self> {
         let podman = Podman {
-            progress: MultiProgress::new(),
+            progress: MultiProgress::with_draw_target(if config.dry_run {
+                ProgressDrawTarget::hidden()
+            } else {
+                ProgressDrawTarget::stderr()
+            }),
             project_directory: config.project_directory.clone(),
-            verbose: config.verbose,
+            dry_run: config.dry_run,
         };
-        let output = podman.run(["version", "--format", "json"]).await?;
+        let output = podman.force_run(["version", "--format", "json"]).await?;
         let version = serde_json::from_str::<Version>(&output)
             .with_context(|| anyhow!("Podman version not recognised"))?
             .client
@@ -59,6 +63,25 @@ impl Podman {
         I: IntoIterator<Item = S>,
         S: AsRef<OsStr>,
     {
+        if self.dry_run {
+            println!(
+                "`{}`",
+                args.into_iter()
+                    .map(|arg| arg.as_ref().to_string_lossy().to_string())
+                    .join(" "),
+            );
+
+            Ok(String::new())
+        } else {
+            self.force_run(args).await
+        }
+    }
+
+    pub(crate) async fn force_run<I, S>(&self, args: I) -> Result<String>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>,
+    {
         let mut command = Command::new("podman");
         command.current_dir(&self.project_directory).args(args);
 
@@ -73,20 +96,6 @@ impl Podman {
                     .join(" ")
             )
         })?;
-
-        if self.verbose {
-            self.progress
-                .println(format!(
-                    "`{} {}`",
-                    command.as_std().get_program().to_string_lossy(),
-                    command
-                        .as_std()
-                        .get_args()
-                        .map(OsStr::to_string_lossy)
-                        .join(" "),
-                ))
-                .unwrap();
-        }
 
         if output.status.success() {
             Ok(String::from_utf8_lossy(&output.stdout).to_string())

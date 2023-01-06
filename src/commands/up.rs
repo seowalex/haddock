@@ -1,9 +1,8 @@
-use std::{env, fmt::Write, time::Duration};
+use std::env;
 
 use anyhow::{bail, Result};
 use clap::{crate_version, ValueEnum};
 use futures::{stream::FuturesUnordered, try_join, TryStreamExt};
-use indicatif::{ProgressBar, ProgressState, ProgressStyle};
 use itertools::Itertools;
 use petgraph::{algo::tarjan_scc, graphmap::DiGraphMap};
 
@@ -130,7 +129,7 @@ async fn create_pod(
     spinner.set_prefix(format!("Pod {name}"));
     spinner.set_message("Creating");
 
-    if podman.run(["pod", "exists", name]).await.is_err() {
+    if podman.force_run(["pod", "exists", name]).await.is_err() {
         let pod_labels = [
             (
                 "project.working_dir",
@@ -182,7 +181,7 @@ async fn create_networks(podman: &Podman, file: &Compose, labels: &[String]) -> 
             spinner.set_prefix(format!("Network {name}"));
             spinner.set_message("Creating");
 
-            if podman.run(["network", "exists", name]).await.is_err() {
+            if podman.force_run(["network", "exists", name]).await.is_err() {
                 if network.external.unwrap_or_default() {
                     bail!("External network \"{name}\" not found");
                 }
@@ -225,7 +224,7 @@ async fn create_volumes(podman: &Podman, file: &Compose, labels: &[String]) -> R
             spinner.set_prefix(format!("Volume {name}"));
             spinner.set_message("Creating");
 
-            if podman.run(["volume", "exists", name]).await.is_err() {
+            if podman.force_run(["volume", "exists", name]).await.is_err() {
                 if volume.external.unwrap_or_default() {
                     bail!("External volume \"{name}\" not found");
                 }
@@ -268,7 +267,7 @@ async fn create_secrets(podman: &Podman, file: &Compose, labels: &[String]) -> R
             spinner.set_prefix(format!("Secret {name}"));
             spinner.set_message("Creating");
 
-            if podman.run(["secret", "inspect", name]).await.is_err() {
+            if podman.force_run(["secret", "inspect", name]).await.is_err() {
                 if secret.external.unwrap_or_default() {
                     bail!("External secret \"{name}\" not found");
                 }
