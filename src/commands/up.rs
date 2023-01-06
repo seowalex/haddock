@@ -171,7 +171,7 @@ async fn create_pod(
                 spinner.finish_with_message(match result {
                     Ok(_) => "Created",
                     Err(_) => "Error",
-                })
+                });
             })?;
 
         spinner.finish_with_message("Created");
@@ -224,7 +224,7 @@ async fn create_networks(
                         spinner.finish_with_message(match result {
                             Ok(_) => "Created",
                             Err(_) => "Error",
-                        })
+                        });
                     })?;
             } else {
                 spinner.finish_with_message("Exists");
@@ -280,7 +280,7 @@ async fn create_volumes(
                         spinner.finish_with_message(match result {
                             Ok(_) => "Created",
                             Err(_) => "Error",
-                        })
+                        });
                     })?;
             } else {
                 spinner.finish_with_message("Exists");
@@ -336,7 +336,7 @@ async fn create_secrets(
                         spinner.finish_with_message(match result {
                             Ok(_) => "Created",
                             Err(_) => "Error",
-                        })
+                        });
                     })?;
             } else {
                 spinner.finish_with_message("Exists");

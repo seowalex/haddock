@@ -36,7 +36,7 @@ impl Progress {
         .unwrap()
         .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏", "⠿"])
         .with_key("elapsed", |state: &ProgressState, w: &mut dyn Write| {
-            write!(w, "{:.1}s", state.elapsed().as_secs_f64()).unwrap()
+            write!(w, "{:.1}s", state.elapsed().as_secs_f64()).unwrap();
         });
 
         Self {

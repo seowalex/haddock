@@ -15,7 +15,7 @@ use serde_yaml::Value;
 
 use self::{
     parser::{State, Token, Var},
-    types::{Compose, ServiceVolumeType},
+    types::{Compose, Condition, ServiceVolumeType},
 };
 use crate::{
     config::Config,
@@ -344,6 +344,17 @@ pub(crate) fn parse(config: &Config, no_interpolate: bool) -> Result<Compose> {
         if service.pids_limit.is_some() {
             eprintln!(
                 "{} `pids_limit` is deprecated, use the `deploy.reservations.pids` element instead",
+                *STYLED_WARNING
+            );
+        }
+
+        if service
+            .depends_on
+            .values()
+            .any(|dependency| dependency.condition != Condition::Started)
+        {
+            eprintln!(
+                "{} \"service_healthy\" and \"service_completed_successfully\" are unsupported and will degrade to \"service_started\"",
                 *STYLED_WARNING
             );
         }

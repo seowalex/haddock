@@ -552,14 +552,10 @@ impl Service {
             args.push(String::from("--privileged"));
         }
 
-        if let Some(
-            pull_policy @ (PullPolicy::Always
-            | PullPolicy::Never
-            | PullPolicy::Missing
-            | PullPolicy::Newer),
-        ) = &self.pull_policy
-        {
-            args.extend([String::from("--pull"), pull_policy.to_string()]);
+        if let Some(pull_policy) = &self.pull_policy {
+            if *pull_policy != PullPolicy::Build {
+                args.extend([String::from("--pull"), pull_policy.to_string()]);
+            }
         }
 
         if self.read_only.unwrap_or_default() {
@@ -769,7 +765,7 @@ pub(crate) struct Dependency {
     pub(crate) condition: Condition,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub(crate) enum Condition {
     #[serde(rename = "service_started")]
     Started,
@@ -947,7 +943,7 @@ impl Display for Port {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum PullPolicy {
     Always,
