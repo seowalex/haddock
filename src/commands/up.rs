@@ -335,7 +335,6 @@ async fn create_secrets(
 
 pub(crate) async fn run(args: Args, config: Config) -> Result<()> {
     let podman = Podman::new(&config);
-    let progress = Progress::new(&config);
     let file = compose::parse(&config, false)?;
     let mut dependencies = DiGraphMap::new();
 
@@ -374,6 +373,32 @@ pub(crate) async fn run(args: Args, config: Config) -> Result<()> {
         .map(|label| format!("io.podman.compose.{}={}", label.0, label.1))
         .collect::<Vec<_>>();
     let podman = podman.await?;
+    let width = (name.len() + 4)
+        .max(
+            file.networks
+                .values()
+                .map(|network| network.name.as_ref().map_or(0, String::len))
+                .max()
+                .unwrap_or_default()
+                + 8,
+        )
+        .max(
+            file.volumes
+                .values()
+                .map(|volume| volume.name.as_ref().map_or(0, String::len))
+                .max()
+                .unwrap_or_default()
+                + 7,
+        )
+        .max(
+            file.secrets
+                .values()
+                .map(|secret| secret.name.as_ref().map_or(0, String::len))
+                .max()
+                .unwrap_or_default()
+                + 7,
+        );
+    let progress = Progress::new(&config, width);
 
     try_join!(
         create_pod(&podman, &progress, &config, &file, &labels, name),

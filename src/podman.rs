@@ -13,7 +13,6 @@ use crate::config::Config;
 static PODMAN_MIN_SUPPORTED_VERSION: Lazy<semver::Version> =
     Lazy::new(|| semver::Version::new(4, 3, 0));
 
-#[derive(Debug)]
 pub(crate) struct Podman {
     project_directory: PathBuf,
     dry_run: bool,

@@ -16,25 +16,15 @@ static HEADER_STYLE: Lazy<ProgressStyle> = Lazy::new(|| {
     ))
     .unwrap()
 });
-static SPINNER_STYLE: Lazy<ProgressStyle> = Lazy::new(|| {
-    ProgressStyle::with_template(
-        " {spinner:.blue} {prefix:.blue} {wide_msg:.blue} {elapsed:.blue} ",
-    )
-    .unwrap()
-    .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏", "⠿"])
-    .with_key("elapsed", |state: &ProgressState, w: &mut dyn Write| {
-        write!(w, "{:.1}s", state.elapsed().as_secs_f64()).unwrap()
-    })
-});
 
-#[derive(Debug)]
 pub(crate) struct Progress {
     progress: MultiProgress,
     pub(crate) header: ProgressBar,
+    spinner_style: ProgressStyle,
 }
 
 impl Progress {
-    pub(crate) fn new(config: &Config) -> Self {
+    pub(crate) fn new(config: &Config, width: usize) -> Self {
         let progress = MultiProgress::with_draw_target(if config.dry_run {
             ProgressDrawTarget::hidden()
         } else {
@@ -45,14 +35,27 @@ impl Progress {
                 .with_style(HEADER_STYLE.clone())
                 .with_finish(ProgressFinish::AndLeave),
         );
+        let spinner_style = ProgressStyle::with_template(&format!(
+            " {{spinner:.blue}} {{prefix:{}.blue}}  {{wide_msg:.blue}} {{elapsed:.blue}} ",
+            width
+        ))
+        .unwrap()
+        .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏", "⠿"])
+        .with_key("elapsed", |state: &ProgressState, w: &mut dyn Write| {
+            write!(w, "{:.1}s", state.elapsed().as_secs_f64()).unwrap()
+        });
 
-        Self { progress, header }
+        Self {
+            progress,
+            header,
+            spinner_style,
+        }
     }
 
     pub(crate) fn add_spinner(&self) -> ProgressBar {
         let spinner = self
             .progress
-            .add(ProgressBar::new(0).with_style(SPINNER_STYLE.clone()));
+            .add(ProgressBar::new(0).with_style(self.spinner_style.clone()));
 
         spinner.enable_steady_tick(Duration::from_millis(100));
 
