@@ -369,18 +369,18 @@ pub(crate) fn parse(config: &Config, no_interpolate: bool) -> Result<Compose> {
             bail!("Service \"{name}\" cannot have port mappings due to host network mode");
         }
 
-        if service.container_name.is_some() && service.scale.unwrap_or(1) > 1 {
+        if service.container_name.is_some()
+            && service
+                .deploy
+                .as_ref()
+                .and_then(|deploy| deploy.replicas)
+                .or(service.scale)
+                .unwrap_or(1)
+                > 1
+        {
             bail!(
                 "Service \"{name}\" cannot scale beyond one container as it has a container name"
             );
-        }
-
-        if let Some(deploy) = &service.deploy {
-            if service.container_name.is_some() && deploy.replicas.unwrap_or(1) > 1 {
-                bail!(
-                    "Service \"{name}\" cannot scale beyond one container as it has a container name"
-                );
-            }
         }
 
         for label in service.labels.keys() {

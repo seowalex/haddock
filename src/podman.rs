@@ -47,7 +47,7 @@ impl Podman {
     {
         if self.dry_run {
             println!(
-                "`{}`",
+                "`podman {}`",
                 args.into_iter()
                     .map(|arg| arg.as_ref().to_string_lossy().to_string())
                     .join(" "),

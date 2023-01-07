@@ -352,6 +352,88 @@ async fn create_secrets(
         .map(|_| ())
 }
 
+async fn create_containers(
+    podman: &Podman,
+    progress: &Progress,
+    file: &Compose,
+    labels: &[String],
+    name: &str,
+) -> Result<()> {
+    file.services
+        .iter()
+        .flat_map(|(service_name, service)| {
+            (1..=service
+                .deploy
+                .as_ref()
+                .and_then(|deploy| deploy.replicas)
+                .or(service.scale)
+                .unwrap_or(1))
+                .map(|i| async move {
+                    progress.header.inc_length(1);
+
+                    let name = service
+                        .container_name
+                        .clone()
+                        .unwrap_or_else(|| format!("{name}_{service_name}_{i}"));
+                    let spinner = progress.add_spinner();
+
+                    spinner.set_prefix(format!("Container {name}"));
+                    spinner.set_message("Creating");
+
+                    if podman
+                        .force_run(["container", "exists", &name])
+                        .await
+                        .is_err()
+                    {
+                        let container_labels =
+                            [("service", &name), ("container-number", &i.to_string())]
+                                .into_iter()
+                                .map(|label| format!("io.podman.compose.{}={}", label.0, label.1))
+                                .collect::<Vec<_>>();
+                        let (global_args, args) = service.to_args();
+
+                        podman
+                            .run(
+                                global_args
+                                    .iter()
+                                    .map(AsRef::as_ref)
+                                    .chain(["create"])
+                                    .chain(labels.iter().flat_map(|label| ["--label", label]))
+                                    .chain(
+                                        container_labels
+                                            .iter()
+                                            .flat_map(|label| ["--label", label]),
+                                    )
+                                    .chain(if service.container_name.is_none() {
+                                        vec!["--name", &name]
+                                    } else {
+                                        vec![]
+                                    })
+                                    .chain(args.iter().map(AsRef::as_ref)),
+                            )
+                            .await
+                            .tap(|result| {
+                                spinner.finish_with_message(match result {
+                                    Ok(_) => "Created",
+                                    Err(_) => "Error",
+                                });
+                            })?;
+                    } else {
+                        spinner.finish_with_message("Exists");
+                    }
+
+                    progress.header.inc(1);
+
+                    Ok(())
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect::<FuturesUnordered<_>>()
+        .try_collect::<Vec<_>>()
+        .await
+        .map(|_| ())
+}
+
 pub(crate) async fn run(args: Args, config: Config) -> Result<()> {
     let podman = Podman::new(&config);
     let mut file = compose::parse(&config, false)?;
@@ -453,6 +535,36 @@ pub(crate) async fn run(args: Args, config: Config) -> Result<()> {
             })
             .collect();
     }
+
+    let width = file
+        .services
+        .iter()
+        .map(|(service_name, service)| {
+            service.container_name.as_ref().map_or_else(
+                || {
+                    name.len()
+                        + service_name.len()
+                        + service
+                            .deploy
+                            .as_ref()
+                            .and_then(|deploy| deploy.replicas)
+                            .or(service.scale)
+                            .unwrap_or(1)
+                            .to_string()
+                            .len()
+                        + 2
+                },
+                String::len,
+            )
+        })
+        .max()
+        .unwrap_or_default()
+        + 10;
+    let progress = Progress::new(&config, width);
+
+    create_containers(&podman, &progress, &file, &labels, name).await?;
+
+    progress.header.finish();
 
     Ok(())
 }
