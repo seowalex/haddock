@@ -66,13 +66,12 @@ pub(crate) fn run(args: Args, config: Config) -> Result<()> {
                 println!("{volume}");
             }
         } else if args.profiles {
-            let mut all_profiles = IndexSet::new();
-
-            for service in file.services.into_values() {
-                all_profiles.extend(service.profiles);
-            }
-
-            for profile in all_profiles {
+            for profile in file
+                .services
+                .into_values()
+                .flat_map(|service| service.profiles)
+                .collect::<IndexSet<_>>()
+            {
                 println!("{profile}");
             }
         } else if args.images {

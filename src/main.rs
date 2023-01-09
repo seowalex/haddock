@@ -62,7 +62,7 @@ pub(crate) struct Flags {
     pub(crate) ignore_orphans: Option<bool>,
 
     /// Only show the Podman commands that will be executed
-    #[arg(long, action = ArgAction::SetTrue)]
+    #[arg(long, action = ArgAction::SetTrue, global = true)]
     pub(crate) dry_run: Option<bool>,
 }
 

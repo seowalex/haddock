@@ -87,7 +87,7 @@ fn interpolate(value: &Value) -> Result<Value> {
     if let Some(value) = value.as_str() {
         parser::parse(value).and_then(evaluate).map(Value::String)
     } else if let Some(values) = value.as_sequence() {
-        values.iter().map(interpolate).collect::<Result<_>>()
+        values.iter().map(interpolate).collect()
     } else if let Some(values) = value.as_mapping() {
         values
             .iter()
@@ -487,7 +487,7 @@ mod tests {
     use pretty_assertions::assert_eq;
     use serde_yaml::Value;
     use test_generator::test_resources;
-    use tokio_test::{assert_err, assert_ok};
+    use tokio_test::assert_ok;
 
     use super::*;
 
@@ -498,17 +498,7 @@ mod tests {
             ..Config::default()
         };
 
-        if [
-            "tests/fixtures/override/compose.yaml",
-            "tests/fixtures/override/compose.expected.yaml",
-            "tests/fixtures/override/compose.override.yaml",
-        ]
-        .contains(&resource)
-        {
-            assert_err!(super::parse(&config, false));
-        } else {
-            assert_ok!(super::parse(&config, false));
-        }
+        assert_ok!(super::parse(&config, false));
     }
 
     #[test]

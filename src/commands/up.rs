@@ -3,9 +3,11 @@ use std::{env, mem};
 use anyhow::{bail, Result};
 use clap::{crate_version, ValueEnum};
 use futures::{stream::FuturesUnordered, try_join, TryStreamExt};
+use indexmap::IndexMap;
 use itertools::Itertools;
-use petgraph::{algo::tarjan_scc, graphmap::DiGraphMap};
+use petgraph::{algo::tarjan_scc, graphmap::DiGraphMap, Direction};
 use tap::Tap;
+use tokio::sync::mpsc;
 
 use crate::{
     compose::{
@@ -173,8 +175,6 @@ async fn create_pod(
                     Err(_) => "Error",
                 });
             })?;
-
-        spinner.finish_with_message("Created");
     } else {
         spinner.finish_with_message("Exists");
     }
@@ -356,77 +356,122 @@ async fn create_containers(
     podman: &Podman,
     progress: &Progress,
     file: &Compose,
+    dependencies: &DiGraphMap<&String, ()>,
     labels: &[String],
     name: &str,
 ) -> Result<()> {
+    let (txs, mut rxs): (IndexMap<_, _>, IndexMap<_, _>) = file
+        .services
+        .keys()
+        .map(|service| {
+            let (tx, rx) = mpsc::unbounded_channel::<Vec<String>>();
+            ((service, tx), (service, rx))
+        })
+        .unzip();
+
     file.services
         .iter()
-        .flat_map(|(service_name, service)| {
-            (1..=service
-                .deploy
-                .as_ref()
-                .and_then(|deploy| deploy.replicas)
-                .or(service.scale)
-                .unwrap_or(1))
-                .map(|i| async move {
-                    progress.header.inc_length(1);
+        .map(|(service_name, service)| {
+            progress.header.inc_length(
+                service
+                    .deploy
+                    .as_ref()
+                    .and_then(|deploy| deploy.replicas)
+                    .or(service.scale)
+                    .unwrap_or(1) as u64,
+            );
 
-                    let name = service
-                        .container_name
-                        .clone()
-                        .unwrap_or_else(|| format!("{name}_{service_name}_{i}"));
-                    let spinner = progress.add_spinner();
+            let txs = &txs;
+            let mut rx = rxs.remove(service_name).unwrap();
 
-                    spinner.set_prefix(format!("Container {name}"));
-                    spinner.set_message("Creating");
+            async move {
+                let mut requirements = Vec::new();
 
-                    if podman
-                        .force_run(["container", "exists", &name])
-                        .await
-                        .is_err()
-                    {
-                        let container_labels =
-                            [("service", &name), ("container-number", &i.to_string())]
-                                .into_iter()
-                                .map(|label| format!("io.podman.compose.{}={}", label.0, label.1))
-                                .collect::<Vec<_>>();
-                        let (global_args, args) = service.to_args();
+                for _ in dependencies.neighbors_directed(service_name, Direction::Incoming) {
+                    requirements.extend(rx.recv().await.unwrap());
+                }
 
-                        podman
-                            .run(
-                                global_args
-                                    .iter()
-                                    .map(AsRef::as_ref)
-                                    .chain(["create"])
-                                    .chain(labels.iter().flat_map(|label| ["--label", label]))
-                                    .chain(
-                                        container_labels
-                                            .iter()
-                                            .flat_map(|label| ["--label", label]),
-                                    )
-                                    .chain(if service.container_name.is_none() {
-                                        vec!["--name", &name]
-                                    } else {
-                                        vec![]
-                                    })
-                                    .chain(args.iter().map(AsRef::as_ref)),
-                            )
+                let requirements = &requirements;
+
+                let names = (1..=service
+                    .deploy
+                    .as_ref()
+                    .and_then(|deploy| deploy.replicas)
+                    .or(service.scale)
+                    .unwrap_or(1))
+                    .map(|i| async move {
+                        let name = service
+                            .container_name
+                            .clone()
+                            .unwrap_or_else(|| format!("{name}_{service_name}_{i}"));
+                        let spinner = progress.add_spinner();
+
+                        spinner.set_prefix(format!("Container {name}"));
+                        spinner.set_message("Creating");
+
+                        if podman
+                            .force_run(["container", "exists", &name])
                             .await
-                            .tap(|result| {
-                                spinner.finish_with_message(match result {
-                                    Ok(_) => "Created",
-                                    Err(_) => "Error",
-                                });
-                            })?;
-                    } else {
-                        spinner.finish_with_message("Exists");
-                    }
+                            .is_err()
+                        {
+                            let container_labels =
+                                [("service", &name), ("container-number", &i.to_string())]
+                                    .into_iter()
+                                    .map(|label| {
+                                        format!("io.podman.compose.{}={}", label.0, label.1)
+                                    })
+                                    .collect::<Vec<_>>();
+                            let (global_args, args) = service.to_args();
 
-                    progress.header.inc(1);
+                            podman
+                                .run(
+                                    global_args
+                                        .iter()
+                                        .map(AsRef::as_ref)
+                                        .chain(["create"])
+                                        .chain(labels.iter().flat_map(|label| ["--label", label]))
+                                        .chain(
+                                            container_labels
+                                                .iter()
+                                                .flat_map(|label| ["--label", label]),
+                                        )
+                                        .chain(if service.container_name.is_none() {
+                                            vec!["--name", &name]
+                                        } else {
+                                            vec![]
+                                        })
+                                        .chain(
+                                            requirements.iter().flat_map(|requirement| {
+                                                ["--requires", requirement]
+                                            }),
+                                        )
+                                        .chain(args.iter().map(AsRef::as_ref)),
+                                )
+                                .await
+                                .tap(|result| {
+                                    spinner.finish_with_message(match result {
+                                        Ok(_) => "Created",
+                                        Err(_) => "Error",
+                                    });
+                                })?;
+                        } else {
+                            spinner.finish_with_message("Exists");
+                        }
 
-                    Ok(())
-                })
-                .collect::<Vec<_>>()
+                        progress.header.inc(1);
+
+                        anyhow::Ok(name)
+                    })
+                    .collect::<FuturesUnordered<_>>()
+                    .try_collect::<Vec<_>>()
+                    .await?;
+
+                for dependent in dependencies.neighbors(service_name) {
+                    txs[dependent].send(names.clone())?;
+                }
+
+                Ok(())
+            }
         })
         .collect::<FuturesUnordered<_>>()
         .try_collect::<Vec<_>>()
@@ -437,26 +482,22 @@ async fn create_containers(
 pub(crate) async fn run(args: Args, config: Config) -> Result<()> {
     let podman = Podman::new(&config);
     let mut file = compose::parse(&config, false)?;
-    let mut dependencies = DiGraphMap::new();
 
-    for (to, service) in &file.services {
-        dependencies.extend(
+    let dependencies = file
+        .services
+        .iter()
+        .flat_map(|(to, service)| {
             service
                 .depends_on
                 .keys()
-                .map(|from| (from.as_str(), to.as_str(), ())),
-        );
-        dependencies.extend(
-            service
-                .links
-                .keys()
-                .map(|from| (from.as_str(), to.as_str(), ())),
-        );
-    }
-
-    let (nodes, cycles): (Vec<_>, Vec<_>) = tarjan_scc(&dependencies)
+                .chain(service.links.keys())
+                .map(move |from| (from, to, ()))
+        })
+        .collect::<DiGraphMap<_, _>>();
+    let cycles = tarjan_scc(&dependencies)
         .into_iter()
-        .partition(|component| component.len() == 1);
+        .filter(|component| component.len() > 1)
+        .collect::<Vec<_>>();
 
     if !cycles.is_empty() {
         bail!(
@@ -473,7 +514,6 @@ pub(crate) async fn run(args: Args, config: Config) -> Result<()> {
         .into_iter()
         .map(|label| format!("io.podman.compose.{}={}", label.0, label.1))
         .collect::<Vec<_>>();
-    let podman = podman.await?;
     let width = (name.len() + 4)
         .max(
             file.networks
@@ -500,6 +540,7 @@ pub(crate) async fn run(args: Args, config: Config) -> Result<()> {
                 + 7,
         );
     let progress = Progress::new(&config, width);
+    let podman = podman.await?;
 
     try_join!(
         create_pod(&podman, &progress, &config, &file, &labels, name),
@@ -561,8 +602,19 @@ pub(crate) async fn run(args: Args, config: Config) -> Result<()> {
         .unwrap_or_default()
         + 10;
     let progress = Progress::new(&config, width);
+    let dependencies = file
+        .services
+        .iter()
+        .flat_map(|(to, service)| {
+            service
+                .depends_on
+                .keys()
+                .chain(service.links.keys())
+                .map(move |from| (from, to, ()))
+        })
+        .collect::<DiGraphMap<_, _>>();
 
-    create_containers(&podman, &progress, &file, &labels, name).await?;
+    create_containers(&podman, &progress, &file, &dependencies, &labels, name).await?;
 
     progress.header.finish();
 

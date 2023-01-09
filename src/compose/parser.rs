@@ -104,13 +104,7 @@ fn string(input: &str) -> IResult<&str, Vec<Token>> {
                         string.push(char);
                     }
                 } else {
-                    let mut string = String::new();
-
-                    for char in token.0 {
-                        string.push(char);
-                    }
-
-                    tokens.push(Token::Str(string));
+                    tokens.push(Token::Str(token.0.into_iter().collect()));
                 }
             }
 

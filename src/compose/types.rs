@@ -102,8 +102,8 @@ pub(crate) struct Service {
     pub(crate) cpu_rt_period: Option<Duration>,
     #[serde_as(as = "Option<PickFirst<(DurationMicroSeconds, DurationWithSuffix)>>")]
     pub(crate) cpu_rt_runtime: Option<Duration>,
-    pub(crate) cpu_shares: Option<i64>,
-    pub(crate) cpus: Option<f32>,
+    pub(crate) cpu_shares: Option<i32>,
+    pub(crate) cpus: Option<f64>,
     pub(crate) cpuset: Option<String>,
     #[serde_as(as = "PickFirst<(_, IndexMap<DisplayFromAny, _>, DependsOnVec)>")]
     pub(crate) depends_on: IndexMap<String, Dependency>,
@@ -146,7 +146,7 @@ pub(crate) struct Service {
     pub(crate) mac_address: Option<String>,
     pub(crate) mem_limit: Option<Byte>,
     pub(crate) mem_reservation: Option<Byte>,
-    pub(crate) mem_swappiness: Option<i64>,
+    pub(crate) mem_swappiness: Option<i32>,
     pub(crate) memswap_limit: Option<SwapLimit>,
     #[serde_as(as = "PickFirst<(_, IndexMap<DisplayFromAny, _>, NetworksVec)>")]
     #[serde_with(skip_apply)]
@@ -154,9 +154,9 @@ pub(crate) struct Service {
     pub(crate) networks: IndexMap<String, Option<ServiceNetwork>>,
     pub(crate) network_mode: Option<String>,
     pub(crate) oom_kill_disable: Option<bool>,
-    pub(crate) oom_score_adj: Option<i64>,
+    pub(crate) oom_score_adj: Option<i32>,
     pub(crate) pid: Option<String>,
-    pub(crate) pids_limit: Option<i64>,
+    pub(crate) pids_limit: Option<i32>,
     pub(crate) platform: Option<String>,
     #[serde_as(as = "Vec<PickFirst<(_, PortOrString, PortOrU16)>>")]
     pub(crate) ports: Vec<Port>,
@@ -325,10 +325,6 @@ impl Service {
             args.extend([String::from("--cpuset-cpus"), cpuset]);
         }
 
-        for dependency in self.depends_on.keys().cloned() {
-            args.extend([String::from("--requires"), dependency]);
-        }
-
         let mut is_deploy_v3 = [false; 4];
 
         if let Some(deploy) = &self.deploy {
@@ -489,10 +485,6 @@ impl Service {
 
         for (key, value) in &self.labels {
             args.extend([String::from("--label"), format!("{key}={value}")]);
-        }
-
-        for link in self.links.keys().cloned() {
-            args.extend([String::from("--requires"), link]);
         }
 
         if let Some(logging) = &self.logging {
@@ -794,9 +786,9 @@ pub(crate) struct Resources {
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct Resource {
     #[serde_as(as = "Option<PickFirst<(_, DisplayFromStr)>>")]
-    pub(crate) cpus: Option<f32>,
+    pub(crate) cpus: Option<f64>,
     pub(crate) memory: Option<Byte>,
-    pub(crate) pids: Option<i64>,
+    pub(crate) pids: Option<i32>,
 }
 
 #[skip_serializing_none]
@@ -853,7 +845,7 @@ pub(crate) struct Healthcheck {
     pub(crate) timeout: Option<Duration>,
     #[serde_as(as = "Option<DurationWithSuffix>")]
     pub(crate) start_period: Option<Duration>,
-    pub(crate) retries: Option<u64>,
+    pub(crate) retries: Option<u32>,
     pub(crate) disable: Option<bool>,
 }
 
