@@ -27,7 +27,6 @@ pub(crate) struct Config {
     pub(crate) profiles: Vec<String>,
     pub(crate) env_file: PathBuf,
     pub(crate) project_directory: PathBuf,
-    pub(crate) ignore_orphans: bool,
     pub(crate) dry_run: bool,
 }
 
@@ -105,7 +104,6 @@ fn resolve(flags: &Flags) -> Result<Config> {
         files,
         profiles: flags.profile.unwrap_or_default(),
         project_directory,
-        ignore_orphans: flags.ignore_orphans.unwrap_or_default(),
         dry_run: flags.dry_run.unwrap_or_default(),
         ..Config::default()
     })

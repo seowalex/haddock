@@ -11,8 +11,7 @@ use anyhow::Result;
 use clap::{ArgAction, Parser};
 use serde::{Deserialize, Serialize};
 use serde_with::{
-    formats::CommaSeparator, serde_as, skip_serializing_none, BoolFromInt, PickFirst,
-    StringWithSeparator,
+    formats::CommaSeparator, serde_as, skip_serializing_none, PickFirst, StringWithSeparator,
 };
 
 use self::{commands::Command, utils::PathSeparator};
@@ -56,10 +55,6 @@ pub(crate) struct Flags {
 
     #[arg(skip)]
     pub(crate) path_separator: Option<String>,
-
-    #[arg(skip)]
-    #[serde_as(as = "Option<PickFirst<(_, BoolFromInt)>>")]
-    pub(crate) ignore_orphans: Option<bool>,
 
     /// Only show the Podman commands that will be executed
     #[arg(long, action = ArgAction::SetTrue, global = true)]
