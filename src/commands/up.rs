@@ -6,7 +6,6 @@ use futures::{stream::FuturesUnordered, try_join, TryStreamExt};
 use indexmap::IndexMap;
 use itertools::Itertools;
 use petgraph::{algo::tarjan_scc, graphmap::DiGraphMap, Direction};
-use tap::Tap;
 use tokio::sync::mpsc;
 
 use crate::{
@@ -16,7 +15,7 @@ use crate::{
     },
     config::Config,
     podman::Podman,
-    progress::Progress,
+    progress::{Finish, Progress},
     utils::parse_key_val,
 };
 
@@ -76,7 +75,7 @@ pub(crate) struct Args {
     #[arg(long)]
     exit_code_from: Option<String>,
 
-    /// Return the exit code of the selected service container
+    /// Use this timeout in seconds for container shutdown when attached or when containers are already running
     #[arg(short, long, default_value_t = 10)]
     timeout: i32,
 
@@ -129,12 +128,7 @@ async fn create_pod(
     labels: &[String],
     name: &str,
 ) -> Result<()> {
-    progress.header.inc_length(1);
-
-    let spinner = progress.add_spinner();
-
-    spinner.set_prefix(format!("Pod {name}"));
-    spinner.set_message("Creating");
+    let spinner = progress.add_spinner(format!("Pod {name}"), "Creating");
 
     if podman.force_run(["pod", "exists", name]).await.is_err() {
         let pod_labels = [
@@ -169,17 +163,10 @@ async fn create_pod(
                     .chain([name]),
             )
             .await
-            .tap(|result| {
-                spinner.finish_with_message(match result {
-                    Ok(_) => "Created",
-                    Err(_) => "Error",
-                });
-            })?;
+            .finish_with_message(spinner, "Created")?;
     } else {
         spinner.finish_with_message("Exists");
     }
-
-    progress.header.inc(1);
 
     Ok(())
 }
@@ -193,13 +180,8 @@ async fn create_networks(
     file.networks
         .values()
         .map(|network| async {
-            progress.header.inc_length(1);
-
             let name = network.name.as_ref().unwrap();
-            let spinner = progress.add_spinner();
-
-            spinner.set_prefix(format!("Network {name}"));
-            spinner.set_message("Creating");
+            let spinner = progress.add_spinner(format!("Network {name}"), "Creating");
 
             if podman.force_run(["network", "exists", name]).await.is_err() {
                 if network.external.unwrap_or_default() {
@@ -220,17 +202,10 @@ async fn create_networks(
                             .chain(network.to_args().iter().map(AsRef::as_ref)),
                     )
                     .await
-                    .tap(|result| {
-                        spinner.finish_with_message(match result {
-                            Ok(_) => "Created",
-                            Err(_) => "Error",
-                        });
-                    })?;
+                    .finish_with_message(spinner, "Created")?;
             } else {
                 spinner.finish_with_message("Exists");
             }
-
-            progress.header.inc(1);
 
             Ok(())
         })
@@ -249,13 +224,8 @@ async fn create_volumes(
     file.volumes
         .values()
         .map(|volume| async {
-            progress.header.inc_length(1);
-
             let name = volume.name.as_ref().unwrap();
-            let spinner = progress.add_spinner();
-
-            spinner.set_prefix(format!("Volume {name}"));
-            spinner.set_message("Creating");
+            let spinner = progress.add_spinner(format!("Volume {name}"), "Creating");
 
             if podman.force_run(["volume", "exists", name]).await.is_err() {
                 if volume.external.unwrap_or_default() {
@@ -276,17 +246,10 @@ async fn create_volumes(
                             .chain(volume.to_args().iter().map(AsRef::as_ref)),
                     )
                     .await
-                    .tap(|result| {
-                        spinner.finish_with_message(match result {
-                            Ok(_) => "Created",
-                            Err(_) => "Error",
-                        });
-                    })?;
+                    .finish_with_message(spinner, "Created")?;
             } else {
                 spinner.finish_with_message("Exists");
             }
-
-            progress.header.inc(1);
 
             Ok(())
         })
@@ -305,13 +268,8 @@ async fn create_secrets(
     file.secrets
         .values()
         .map(|secret| async {
-            progress.header.inc_length(1);
-
             let name = secret.name.as_ref().unwrap();
-            let spinner = progress.add_spinner();
-
-            spinner.set_prefix(format!("Secret {name}"));
-            spinner.set_message("Creating");
+            let spinner = progress.add_spinner(format!("Secret {name}"), "Creating");
 
             if podman.force_run(["secret", "inspect", name]).await.is_err() {
                 if secret.external.unwrap_or_default() {
@@ -332,17 +290,10 @@ async fn create_secrets(
                             .chain(secret.to_args().iter().map(AsRef::as_ref)),
                     )
                     .await
-                    .tap(|result| {
-                        spinner.finish_with_message(match result {
-                            Ok(_) => "Created",
-                            Err(_) => "Error",
-                        });
-                    })?;
+                    .finish_with_message(spinner, "Created")?;
             } else {
                 spinner.finish_with_message("Exists");
             }
-
-            progress.header.inc(1);
 
             Ok(())
         })
@@ -356,10 +307,20 @@ async fn create_containers(
     podman: &Podman,
     progress: &Progress,
     file: &Compose,
-    dependencies: &DiGraphMap<&String, ()>,
     labels: &[String],
     name: &str,
 ) -> Result<()> {
+    let dependencies = &file
+        .services
+        .iter()
+        .flat_map(|(to, service)| {
+            service
+                .depends_on
+                .keys()
+                .chain(service.links.keys())
+                .map(move |from| (from, to, ()))
+        })
+        .collect::<DiGraphMap<_, _>>();
     let (txs, mut rxs): (IndexMap<_, _>, IndexMap<_, _>) = file
         .services
         .keys()
@@ -368,20 +329,11 @@ async fn create_containers(
             ((service, tx), (service, rx))
         })
         .unzip();
+    let txs = &txs;
 
     file.services
         .iter()
         .map(|(service_name, service)| {
-            progress.header.inc_length(
-                service
-                    .deploy
-                    .as_ref()
-                    .and_then(|deploy| deploy.replicas)
-                    .or(service.scale)
-                    .unwrap_or(1) as u64,
-            );
-
-            let txs = &txs;
             let mut rx = rxs.remove(service_name).unwrap();
 
             async move {
@@ -400,27 +352,25 @@ async fn create_containers(
                     .or(service.scale)
                     .unwrap_or(1))
                     .map(|i| async move {
-                        let name = service
+                        let container_name = service
                             .container_name
                             .clone()
                             .unwrap_or_else(|| format!("{name}_{service_name}_{i}"));
-                        let spinner = progress.add_spinner();
-
-                        spinner.set_prefix(format!("Container {name}"));
-                        spinner.set_message("Creating");
+                        let spinner =
+                            progress.add_spinner(format!("Container {container_name}"), "Creating");
 
                         if podman
-                            .force_run(["container", "exists", &name])
+                            .force_run(["container", "exists", &container_name])
                             .await
                             .is_err()
                         {
-                            let container_labels =
-                                [("service", &name), ("container-number", &i.to_string())]
-                                    .into_iter()
-                                    .map(|label| {
-                                        format!("io.podman.compose.{}={}", label.0, label.1)
-                                    })
-                                    .collect::<Vec<_>>();
+                            let container_labels = [
+                                ("service", service_name),
+                                ("container-number", &i.to_string()),
+                            ]
+                            .into_iter()
+                            .map(|label| format!("io.podman.compose.{}={}", label.0, label.1))
+                            .collect::<Vec<_>>();
                             let (global_args, args) = service.to_args();
 
                             podman
@@ -428,18 +378,18 @@ async fn create_containers(
                                     global_args
                                         .iter()
                                         .map(AsRef::as_ref)
-                                        .chain(["create"])
+                                        .chain(["create", "--pod", name])
+                                        .chain(if service.container_name.is_none() {
+                                            vec!["--name", &container_name]
+                                        } else {
+                                            vec![]
+                                        })
                                         .chain(labels.iter().flat_map(|label| ["--label", label]))
                                         .chain(
                                             container_labels
                                                 .iter()
                                                 .flat_map(|label| ["--label", label]),
                                         )
-                                        .chain(if service.container_name.is_none() {
-                                            vec!["--name", &name]
-                                        } else {
-                                            vec![]
-                                        })
                                         .chain(
                                             requirements.iter().flat_map(|requirement| {
                                                 ["--requires", requirement]
@@ -448,19 +398,12 @@ async fn create_containers(
                                         .chain(args.iter().map(AsRef::as_ref)),
                                 )
                                 .await
-                                .tap(|result| {
-                                    spinner.finish_with_message(match result {
-                                        Ok(_) => "Created",
-                                        Err(_) => "Error",
-                                    });
-                                })?;
+                                .finish_with_message(spinner, "Created")?;
                         } else {
                             spinner.finish_with_message("Exists");
                         }
 
-                        progress.header.inc(1);
-
-                        anyhow::Ok(name)
+                        anyhow::Ok(container_name)
                     })
                     .collect::<FuturesUnordered<_>>()
                     .try_collect::<Vec<_>>()
@@ -514,32 +457,7 @@ pub(crate) async fn run(args: Args, config: Config) -> Result<()> {
         .into_iter()
         .map(|label| format!("io.podman.compose.{}={}", label.0, label.1))
         .collect::<Vec<_>>();
-    let width = (name.len() + 4)
-        .max(
-            file.networks
-                .values()
-                .map(|network| network.name.as_ref().map_or(0, String::len))
-                .max()
-                .unwrap_or_default()
-                + 8,
-        )
-        .max(
-            file.volumes
-                .values()
-                .map(|volume| volume.name.as_ref().map_or(0, String::len))
-                .max()
-                .unwrap_or_default()
-                + 7,
-        )
-        .max(
-            file.secrets
-                .values()
-                .map(|secret| secret.name.as_ref().map_or(0, String::len))
-                .max()
-                .unwrap_or_default()
-                + 7,
-        );
-    let progress = Progress::new(&config, width);
+    let progress = Progress::new(&config);
     let podman = podman.await?;
 
     try_join!(
@@ -549,7 +467,7 @@ pub(crate) async fn run(args: Args, config: Config) -> Result<()> {
         create_secrets(&podman, &progress, &file, &labels)
     )?;
 
-    progress.header.finish();
+    progress.finish();
 
     for service in file.services.values_mut() {
         service.networks = mem::take(&mut service.networks)
@@ -577,46 +495,11 @@ pub(crate) async fn run(args: Args, config: Config) -> Result<()> {
             .collect();
     }
 
-    let width = file
-        .services
-        .iter()
-        .map(|(service_name, service)| {
-            service.container_name.as_ref().map_or_else(
-                || {
-                    name.len()
-                        + service_name.len()
-                        + service
-                            .deploy
-                            .as_ref()
-                            .and_then(|deploy| deploy.replicas)
-                            .or(service.scale)
-                            .unwrap_or(1)
-                            .to_string()
-                            .len()
-                        + 2
-                },
-                String::len,
-            )
-        })
-        .max()
-        .unwrap_or_default()
-        + 10;
-    let progress = Progress::new(&config, width);
-    let dependencies = file
-        .services
-        .iter()
-        .flat_map(|(to, service)| {
-            service
-                .depends_on
-                .keys()
-                .chain(service.links.keys())
-                .map(move |from| (from, to, ()))
-        })
-        .collect::<DiGraphMap<_, _>>();
+    let progress = Progress::new(&config);
 
-    create_containers(&podman, &progress, &file, &dependencies, &labels, name).await?;
+    create_containers(&podman, &progress, &file, &labels, name).await?;
 
-    progress.header.finish();
+    progress.finish();
 
     Ok(())
 }
