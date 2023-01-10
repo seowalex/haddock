@@ -81,38 +81,28 @@ pub(crate) fn run(args: Args, config: Config) -> Result<()> {
                 }
             }
         } else {
+            let mut contents;
+
             match args.format {
                 Format::Yaml => {
-                    let contents = serde_yaml::to_string(&file)?;
-
-                    if let Some(path) = args.output {
-                        fs::write(&path, contents).with_context(|| match path.absolutize() {
-                            Ok(path) => anyhow!(
-                                "{} not found",
-                                path.parent().unwrap_or_else(|| Path::new("/")).display()
-                            ),
-                            Err(err) => Error::from(err),
-                        })?;
-                    } else {
-                        print!("{contents}");
-                    }
+                    contents = serde_yaml::to_string(&file)?;
                 }
                 Format::Json => {
-                    let mut contents = serde_json::to_string_pretty(&file)?;
+                    contents = serde_json::to_string_pretty(&file)?;
                     contents.push('\n');
-
-                    if let Some(path) = args.output {
-                        fs::write(&path, contents).with_context(|| match path.absolutize() {
-                            Ok(path) => anyhow!(
-                                "{} not found",
-                                path.parent().unwrap_or_else(|| Path::new("/")).display()
-                            ),
-                            Err(err) => Error::from(err),
-                        })?;
-                    } else {
-                        print!("{contents}");
-                    }
                 }
+            }
+
+            if let Some(path) = args.output {
+                fs::write(&path, contents).with_context(|| match path.absolutize() {
+                    Ok(path) => anyhow!(
+                        "{} not found",
+                        path.parent().unwrap_or_else(|| Path::new("/")).display()
+                    ),
+                    Err(err) => Error::from(err),
+                })?;
+            } else {
+                print!("{contents}");
             }
         }
     }
