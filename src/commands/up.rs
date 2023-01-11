@@ -2,11 +2,12 @@ use std::{env, mem};
 
 use anyhow::{bail, Result};
 use clap::{crate_version, ValueEnum};
-use futures::{stream::FuturesUnordered, try_join, TryStreamExt};
+use futures::{stream::FuturesUnordered, try_join, StreamExt, TryStreamExt};
 use indexmap::IndexMap;
 use itertools::Itertools;
 use petgraph::{algo::tarjan_scc, graphmap::DiGraphMap, Direction};
-use tokio::sync::mpsc;
+use tokio::sync::broadcast;
+use tokio_stream::wrappers::BroadcastStream;
 
 use crate::{
     compose::{
@@ -321,100 +322,103 @@ async fn create_containers(
                 .map(move |from| (from, to, ()))
         })
         .collect::<DiGraphMap<_, _>>();
-    let (txs, mut rxs): (IndexMap<_, _>, IndexMap<_, _>) = file
+    let capacity = dependencies
+        .nodes()
+        .map(|node| {
+            dependencies
+                .neighbors_directed(node, Direction::Incoming)
+                .count()
+        })
+        .max()
+        .unwrap_or_default();
+    let txs = file
         .services
         .keys()
-        .map(|service| {
-            let (tx, rx) = mpsc::unbounded_channel::<Vec<String>>();
-            ((service, tx), (service, rx))
-        })
-        .unzip();
+        .map(|service| (service, broadcast::channel::<Vec<String>>(capacity).0))
+        .collect::<IndexMap<_, _>>();
     let txs = &txs;
 
     file.services
         .iter()
-        .map(|(service_name, service)| {
-            let mut rx = rxs.remove(service_name).unwrap();
+        .map(|(service_name, service)| async move {
+            let names = (1..=service
+                .deploy
+                .as_ref()
+                .and_then(|deploy| deploy.replicas)
+                .or(service.scale)
+                .unwrap_or(1))
+                .map(|i| async move {
+                    let container_name = service
+                        .container_name
+                        .clone()
+                        .unwrap_or_else(|| format!("{name}_{service_name}_{i}"));
+                    let spinner =
+                        progress.add_spinner(format!("Container {container_name}"), "Creating");
 
-            async move {
-                let mut requirements = Vec::new();
+                    let rx = txs[service_name].subscribe();
+                    let dependencies = dependencies
+                        .neighbors_directed(service_name, Direction::Incoming)
+                        .count();
+                    let requirements = BroadcastStream::new(rx)
+                        .take(dependencies)
+                        .try_concat()
+                        .await?;
 
-                for _ in dependencies.neighbors_directed(service_name, Direction::Incoming) {
-                    requirements.extend(rx.recv().await.unwrap());
-                }
+                    if podman
+                        .force_run(["container", "exists", &container_name])
+                        .await
+                        .is_err()
+                    {
+                        let container_labels = [
+                            ("service", service_name),
+                            ("container-number", &i.to_string()),
+                        ]
+                        .into_iter()
+                        .map(|label| format!("io.podman.compose.{}={}", label.0, label.1))
+                        .collect::<Vec<_>>();
+                        let (global_args, args) = service.to_args();
 
-                let requirements = &requirements;
-
-                let names = (1..=service
-                    .deploy
-                    .as_ref()
-                    .and_then(|deploy| deploy.replicas)
-                    .or(service.scale)
-                    .unwrap_or(1))
-                    .map(|i| async move {
-                        let container_name = service
-                            .container_name
-                            .clone()
-                            .unwrap_or_else(|| format!("{name}_{service_name}_{i}"));
-                        let spinner =
-                            progress.add_spinner(format!("Container {container_name}"), "Creating");
-
-                        if podman
-                            .force_run(["container", "exists", &container_name])
+                        podman
+                            .run(
+                                global_args
+                                    .iter()
+                                    .map(AsRef::as_ref)
+                                    .chain(["create", "--pod", name])
+                                    .chain(if service.container_name.is_none() {
+                                        vec!["--name", &container_name]
+                                    } else {
+                                        vec![]
+                                    })
+                                    .chain(labels.iter().flat_map(|label| ["--label", label]))
+                                    .chain(
+                                        container_labels
+                                            .iter()
+                                            .flat_map(|label| ["--label", label]),
+                                    )
+                                    .chain(
+                                        requirements
+                                            .iter()
+                                            .flat_map(|requirement| ["--requires", requirement]),
+                                    )
+                                    .chain(args.iter().map(AsRef::as_ref)),
+                            )
                             .await
-                            .is_err()
-                        {
-                            let container_labels = [
-                                ("service", service_name),
-                                ("container-number", &i.to_string()),
-                            ]
-                            .into_iter()
-                            .map(|label| format!("io.podman.compose.{}={}", label.0, label.1))
-                            .collect::<Vec<_>>();
-                            let (global_args, args) = service.to_args();
+                            .finish_with_message(spinner, "Created")?;
+                    } else {
+                        spinner.finish_with_message("Exists");
+                    }
 
-                            podman
-                                .run(
-                                    global_args
-                                        .iter()
-                                        .map(AsRef::as_ref)
-                                        .chain(["create", "--pod", name])
-                                        .chain(if service.container_name.is_none() {
-                                            vec!["--name", &container_name]
-                                        } else {
-                                            vec![]
-                                        })
-                                        .chain(labels.iter().flat_map(|label| ["--label", label]))
-                                        .chain(
-                                            container_labels
-                                                .iter()
-                                                .flat_map(|label| ["--label", label]),
-                                        )
-                                        .chain(
-                                            requirements.iter().flat_map(|requirement| {
-                                                ["--requires", requirement]
-                                            }),
-                                        )
-                                        .chain(args.iter().map(AsRef::as_ref)),
-                                )
-                                .await
-                                .finish_with_message(spinner, "Created")?;
-                        } else {
-                            spinner.finish_with_message("Exists");
-                        }
+                    anyhow::Ok(container_name)
+                })
+                .collect::<FuturesUnordered<_>>()
+                .try_collect::<Vec<_>>()
+                .await?;
 
-                        anyhow::Ok(container_name)
-                    })
-                    .collect::<FuturesUnordered<_>>()
-                    .try_collect::<Vec<_>>()
-                    .await?;
-
-                for dependent in dependencies.neighbors(service_name) {
-                    txs[dependent].send(names.clone())?;
-                }
-
-                Ok(())
+            for dependent in dependencies.neighbors(service_name) {
+                txs[dependent].send(names.clone())?;
             }
+
+            Ok(())
         })
         .collect::<FuturesUnordered<_>>()
         .try_collect::<Vec<_>>()

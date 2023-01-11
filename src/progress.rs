@@ -36,6 +36,7 @@ static SPINNER_ERROR_STYLE: Lazy<ProgressStyle> = Lazy::new(|| {
         .unwrap()
 });
 
+#[derive(Debug)]
 pub(crate) struct Progress {
     progress: MultiProgress,
     header: ProgressBar,
@@ -113,6 +114,7 @@ impl Progress {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct Spinner {
     inner: ProgressBar,
     header: ProgressBar,
@@ -125,9 +127,7 @@ pub(crate) trait Finish {
 impl<T> Finish for Result<T> {
     fn finish_with_message(self, spinner: Spinner, message: impl Into<Cow<'static, str>>) -> Self {
         match self {
-            Ok(_) => {
-                spinner.finish_with_message(message);
-            }
+            Ok(_) => spinner.finish_with_message(message),
             Err(_) => {
                 spinner.inner.set_style(SPINNER_ERROR_STYLE.clone());
                 spinner.inner.finish_with_message("Error");
@@ -139,6 +139,13 @@ impl<T> Finish for Result<T> {
 }
 
 impl Spinner {
+    pub(crate) fn finish_and_clear(&self) {
+        self.inner.finish_and_clear();
+
+        self.header
+            .set_length(self.header.length().unwrap_or_default() - 1);
+    }
+
     pub(crate) fn finish_with_message(&self, message: impl Into<Cow<'static, str>>) {
         self.inner.set_style(SPINNER_FINISHED_STYLE.clone());
         self.inner.finish_with_message(message);
