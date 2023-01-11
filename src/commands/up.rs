@@ -1,8 +1,13 @@
-use std::{env, mem};
+use std::{
+    env,
+    fmt::{self, Display, Formatter},
+    mem,
+};
 
 use anyhow::{bail, Result};
 use clap::{crate_version, ValueEnum};
 use futures::{stream::FuturesUnordered, try_join, StreamExt, TryStreamExt};
+use heck::AsKebabCase;
 use indexmap::IndexMap;
 use itertools::Itertools;
 use petgraph::{algo::tarjan_scc, graphmap::DiGraphMap, Direction};
@@ -17,7 +22,6 @@ use crate::{
     config::Config,
     podman::Podman,
     progress::{Finish, Progress},
-    utils::parse_key_val,
 };
 
 /// Create and start containers
@@ -37,16 +41,12 @@ pub(crate) struct Args {
     no_build: bool,
 
     /// Pull image before running
-    #[arg(long, value_enum, default_value_t = PullPolicy::Missing)]
-    pull: PullPolicy,
+    #[arg(long, value_enum)]
+    pull: Option<PullPolicy>,
 
     /// Remove containers for services not defined in the Compose file
     #[arg(long)]
     remove_orphans: bool,
-
-    /// Scale SERVICE to NUM instances, overrides the `scale` setting in the Compose file if present
-    #[arg(long, value_name = "SERVICE>=<NUM", value_parser = parse_key_val::<String, i32>)]
-    scale: Vec<(String, i32)>,
 
     /// Produce monochrome output
     #[arg(long)]
@@ -100,10 +100,6 @@ pub(crate) struct Args {
     #[arg(long)]
     attach_dependencies: bool,
 
-    /// Pull without printing progress information
-    #[arg(long)]
-    quiet_pull: bool,
-
     /// Attach to service output
     #[arg(long)]
     attach: Vec<String>,
@@ -119,6 +115,12 @@ enum PullPolicy {
     Missing,
     Never,
     Newer,
+}
+
+impl Display for PullPolicy {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", AsKebabCase(format!("{self:?}")))
+    }
 }
 
 async fn create_pod(
@@ -305,6 +307,7 @@ async fn create_secrets(
 }
 
 async fn create_containers(
+    args: &Args,
     podman: &Podman,
     progress: &Progress,
     file: &Compose,
@@ -390,7 +393,15 @@ async fn create_containers(
                         .into_iter()
                         .map(|label| format!("io.podman.compose.{}={}", label.0, label.1))
                         .collect::<Vec<_>>();
-                        let (global_args, args) = service.to_args();
+                        let (global_args, service_args) = service.to_args();
+                        let pull_policy =
+                            args.pull
+                                .as_ref()
+                                .map(ToString::to_string)
+                                .or_else(|| match &service.pull_policy {
+                                    Some(compose::types::PullPolicy::Build) | None => None,
+                                    Some(pull_policy) => Some(pull_policy.to_string()),
+                                });
 
                         podman
                             .run(
@@ -400,6 +411,11 @@ async fn create_containers(
                                     .chain(["create", "--pod", name])
                                     .chain(if service.container_name.is_none() {
                                         vec!["--name", &container_name]
+                                    } else {
+                                        vec![]
+                                    })
+                                    .chain(if let Some(pull_policy) = &pull_policy {
+                                        vec!["--pull", pull_policy]
                                     } else {
                                         vec![]
                                     })
@@ -414,7 +430,7 @@ async fn create_containers(
                                             .iter()
                                             .flat_map(|requirement| ["--requires", requirement]),
                                     )
-                                    .chain(args.iter().map(AsRef::as_ref)),
+                                    .chain(service_args.iter().map(AsRef::as_ref)),
                             )
                             .await
                             .finish_with_message(spinner, "Created")?;
@@ -515,7 +531,7 @@ pub(crate) async fn run(args: Args, config: Config) -> Result<()> {
 
     let progress = Progress::new(&config);
 
-    create_containers(&podman, &progress, &file, &labels, name).await?;
+    create_containers(&args, &podman, &progress, &file, &labels, name).await?;
 
     progress.finish();
 

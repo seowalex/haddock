@@ -544,12 +544,6 @@ impl Service {
             args.push(String::from("--privileged"));
         }
 
-        if let Some(pull_policy) = &self.pull_policy {
-            if *pull_policy != PullPolicy::Build {
-                args.extend([String::from("--pull"), pull_policy.to_string()]);
-            }
-        }
-
         if self.read_only.unwrap_or_default() {
             args.push(String::from("--read-only"));
         }
