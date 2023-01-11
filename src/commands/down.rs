@@ -4,7 +4,7 @@ use indexmap::IndexMap;
 use itertools::Itertools;
 use petgraph::{graphmap::DiGraphMap, Direction};
 use serde_yaml::Value;
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, Barrier};
 
 use crate::{
     compose::{self, types::Compose},
@@ -133,6 +133,19 @@ async fn remove_containers(
         .keys()
         .map(|service| (service, broadcast::channel(capacity).0))
         .collect::<IndexMap<_, _>>();
+    let barrier = &Barrier::new(
+        file.services
+            .values()
+            .map(|service| {
+                service
+                    .deploy
+                    .as_ref()
+                    .and_then(|deploy| deploy.replicas)
+                    .or(service.scale)
+                    .unwrap_or(1) as usize
+            })
+            .sum(),
+    );
 
     file.services
         .iter()
@@ -151,6 +164,8 @@ async fn remove_containers(
                     let spinner =
                         progress.add_spinner(format!("Container {container_name}"), "Removing");
                     let mut rx = txs[service_name].subscribe();
+
+                    barrier.wait().await;
 
                     for _ in dependencies.neighbors_directed(service_name, Direction::Incoming) {
                         rx.recv().await?;

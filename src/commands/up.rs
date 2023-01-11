@@ -6,7 +6,7 @@ use futures::{stream::FuturesUnordered, try_join, StreamExt, TryStreamExt};
 use indexmap::IndexMap;
 use itertools::Itertools;
 use petgraph::{algo::tarjan_scc, graphmap::DiGraphMap, Direction};
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, Barrier};
 use tokio_stream::wrappers::BroadcastStream;
 
 use crate::{
@@ -336,6 +336,19 @@ async fn create_containers(
         .keys()
         .map(|service| (service, broadcast::channel::<Vec<String>>(capacity).0))
         .collect::<IndexMap<_, _>>();
+    let barrier = &Barrier::new(
+        file.services
+            .values()
+            .map(|service| {
+                service
+                    .deploy
+                    .as_ref()
+                    .and_then(|deploy| deploy.replicas)
+                    .or(service.scale)
+                    .unwrap_or(1) as usize
+            })
+            .sum(),
+    );
 
     file.services
         .iter()
@@ -353,8 +366,10 @@ async fn create_containers(
                         .unwrap_or_else(|| format!("{name}_{service_name}_{i}"));
                     let spinner =
                         progress.add_spinner(format!("Container {container_name}"), "Creating");
-
                     let rx = txs[service_name].subscribe();
+
+                    barrier.wait().await;
+
                     let dependencies = dependencies
                         .neighbors_directed(service_name, Direction::Incoming)
                         .count();
