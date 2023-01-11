@@ -37,20 +37,26 @@ pub(crate) struct Args {
 async fn remove_networks(podman: &Podman, progress: &Progress, file: &Compose) -> Result<()> {
     file.networks
         .values()
-        .map(|network| async {
-            let name = network.name.as_ref().unwrap();
-            let spinner = progress.add_spinner(format!("Network {name}"), "Removing");
-
-            if podman.force_run(["network", "exists", name]).await.is_ok() {
-                podman
-                    .run(["network", "rm", name])
-                    .await
-                    .finish_with_message(spinner, "Removed")?;
+        .filter_map(|network| {
+            if network.external.unwrap_or_default() {
+                None
             } else {
-                spinner.finish_with_message("Removed");
-            }
+                Some(async {
+                    let name = network.name.as_ref().unwrap();
+                    let spinner = progress.add_spinner(format!("Network {name}"), "Removing");
 
-            Ok(())
+                    if podman.force_run(["network", "exists", name]).await.is_ok() {
+                        podman
+                            .run(["network", "rm", name])
+                            .await
+                            .finish_with_message(spinner, "Removed")?;
+                    } else {
+                        spinner.finish_with_message("Removed");
+                    }
+
+                    Ok(())
+                })
+            }
         })
         .collect::<FuturesUnordered<_>>()
         .try_collect::<Vec<_>>()
@@ -61,20 +67,26 @@ async fn remove_networks(podman: &Podman, progress: &Progress, file: &Compose) -
 async fn remove_volumes(podman: &Podman, progress: &Progress, file: &Compose) -> Result<()> {
     file.volumes
         .values()
-        .map(|volume| async {
-            let name = volume.name.as_ref().unwrap();
-            let spinner = progress.add_spinner(format!("Volume {name}"), "Removing");
-
-            if podman.force_run(["volume", "exists", name]).await.is_ok() {
-                podman
-                    .run(["volume", "rm", name])
-                    .await
-                    .finish_with_message(spinner, "Removed")?;
+        .filter_map(|volume| {
+            if volume.external.unwrap_or_default() {
+                None
             } else {
-                spinner.finish_with_message("Removed");
-            }
+                Some(async {
+                    let name = volume.name.as_ref().unwrap();
+                    let spinner = progress.add_spinner(format!("Volume {name}"), "Removing");
 
-            Ok(())
+                    if podman.force_run(["volume", "exists", name]).await.is_ok() {
+                        podman
+                            .run(["volume", "rm", name])
+                            .await
+                            .finish_with_message(spinner, "Removed")?;
+                    } else {
+                        spinner.finish_with_message("Removed");
+                    }
+
+                    Ok(())
+                })
+            }
         })
         .collect::<FuturesUnordered<_>>()
         .try_collect::<Vec<_>>()
