@@ -331,12 +331,11 @@ async fn create_containers(
         })
         .max()
         .unwrap_or_default();
-    let txs = file
+    let txs = &file
         .services
         .keys()
         .map(|service| (service, broadcast::channel::<Vec<String>>(capacity).0))
         .collect::<IndexMap<_, _>>();
-    let txs = &txs;
 
     file.services
         .iter()
