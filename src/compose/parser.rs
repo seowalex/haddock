@@ -197,7 +197,7 @@ mod tests {
 
     #[test]
     fn empty_string() {
-        assert_eq!(parse("").ok(), Some(vec![]));
+        assert_eq!(parse("").ok(), Some(Vec::new()));
     }
 
     #[test]

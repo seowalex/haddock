@@ -95,7 +95,7 @@ impl Progress {
         for spinner in self.spinners.borrow().iter() {
             spinner
                 .inner
-                .set_prefix(format!("{:1$}", spinner.inner.prefix().trim(), width));
+                .set_prefix(format!("{:width$}", spinner.inner.prefix().trim()));
         }
 
         Spinner {
@@ -126,12 +126,11 @@ pub(crate) trait Finish {
 
 impl<T> Finish for Result<T> {
     fn finish_with_message(self, spinner: Spinner, message: impl Into<Cow<'static, str>>) -> Self {
-        match self {
-            Ok(_) => spinner.finish_with_message(message),
-            Err(_) => {
-                spinner.inner.set_style(SPINNER_ERROR_STYLE.clone());
-                spinner.inner.finish_with_message("Error");
-            }
+        if self.is_ok() {
+            spinner.finish_with_message(message);
+        } else {
+            spinner.inner.set_style(SPINNER_ERROR_STYLE.clone());
+            spinner.inner.finish_with_message("Error");
         }
 
         self

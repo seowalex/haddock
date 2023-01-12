@@ -1,4 +1,4 @@
-mod types;
+pub(crate) mod types;
 
 use std::{ffi::OsStr, path::PathBuf};
 

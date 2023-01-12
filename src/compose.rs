@@ -11,6 +11,7 @@ use anyhow::{anyhow, bail, Context, Error, Result};
 use indexmap::IndexSet;
 use itertools::Itertools;
 use path_absolutize::Absolutize;
+use petgraph::{algo::tarjan_scc, graphmap::DiGraphMap};
 use serde_yaml::Value;
 
 use self::{
@@ -475,6 +476,32 @@ pub(crate) fn parse(config: &Config, no_interpolate: bool) -> Result<Compose> {
         {
             bail!("Conflicting parameters specified for secret \"{name}\"");
         }
+    }
+
+    let dependencies = combined_file
+        .services
+        .iter()
+        .flat_map(|(to, service)| {
+            service
+                .depends_on
+                .keys()
+                .chain(service.links.keys())
+                .map(move |from| (from, to, ()))
+        })
+        .collect::<DiGraphMap<_, _>>();
+    let cycles = tarjan_scc(&dependencies)
+        .into_iter()
+        .filter(|component| component.len() > 1)
+        .collect::<Vec<_>>();
+
+    if !cycles.is_empty() {
+        bail!(
+            "Cycles found: {}",
+            cycles
+                .into_iter()
+                .map(|component| format!("{} -> {}", component.iter().join(" -> "), component[0]))
+                .join(", ")
+        );
     }
 
     Ok(combined_file)
