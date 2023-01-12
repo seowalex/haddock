@@ -87,7 +87,7 @@ pub(crate) async fn remove_containers(
 
                     podman
                         .run(
-                            ["rm", "--ignore"]
+                            ["rm"]
                                 .into_iter()
                                 .chain(if args.stop { vec!["--force"] } else { vec![] })
                                 .chain(if args.volumes {

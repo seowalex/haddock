@@ -43,20 +43,10 @@ async fn remove_networks(podman: &Podman, progress: &Progress, networks: &[Strin
         .map(|network| async move {
             let spinner = progress.add_spinner(format!("Network {network}"), "Removing");
 
-            if podman
-                .force_run(["network", "exists", network])
+            podman
+                .run(["network", "rm", network])
                 .await
-                .is_ok()
-            {
-                podman
-                    .run(["network", "rm", network])
-                    .await
-                    .finish_with_message(spinner, "Removed")?;
-            } else {
-                spinner.finish_with_message("Removed");
-            }
-
-            Ok(())
+                .finish_with_message(spinner, "Removed")
         })
         .collect::<FuturesUnordered<_>>()
         .try_collect::<Vec<_>>()
@@ -70,16 +60,10 @@ async fn remove_volumes(podman: &Podman, progress: &Progress, volumes: &[String]
         .map(|volume| async move {
             let spinner = progress.add_spinner(format!("Volume {volume}"), "Removing");
 
-            if podman.force_run(["volume", "exists", volume]).await.is_ok() {
-                podman
-                    .run(["volume", "rm", volume])
-                    .await
-                    .finish_with_message(spinner, "Removed")?;
-            } else {
-                spinner.finish_with_message("Removed");
-            }
-
-            Ok(())
+            podman
+                .run(["volume", "rm", volume])
+                .await
+                .finish_with_message(spinner, "Removed")
         })
         .collect::<FuturesUnordered<_>>()
         .try_collect::<Vec<_>>()

@@ -77,13 +77,7 @@ pub(crate) async fn stop_containers(
                     }
 
                     podman
-                        .run([
-                            "stop",
-                            "--ignore",
-                            "--time",
-                            &args.timeout.to_string(),
-                            container,
-                        ])
+                        .run(["stop", "--time", &args.timeout.to_string(), container])
                         .await
                         .finish_with_message(spinner, "Stopped")
                 })
