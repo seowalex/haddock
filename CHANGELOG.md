@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `down` command.
 - `rm` command.
 - `stop` command.
+- `pause` command.
+- `unpause` command.
 - `convert` command.
 - `version` command.
 - `help` command.

@@ -134,15 +134,18 @@ pub(crate) async fn run(args: Args, config: Config) -> Result<()> {
     let containers = serde_json::from_str::<Vec<Container>>(&output)?
         .into_iter()
         .filter_map(|mut container| {
-            container.labels.service.and_then(|service| {
-                if args.services.contains(&service)
-                    || (args.services.is_empty() && file.services.keys().contains(&service))
-                {
-                    container.names.pop_front().map(|name| (service, name))
-                } else {
-                    None
-                }
-            })
+            container
+                .labels
+                .and_then(|labels| labels.service)
+                .and_then(|service| {
+                    if args.services.contains(&service)
+                        || (args.services.is_empty() && file.services.keys().contains(&service))
+                    {
+                        container.names.pop_front().map(|name| (service, name))
+                    } else {
+                        None
+                    }
+                })
         })
         .into_group_map();
 

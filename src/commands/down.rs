@@ -109,7 +109,7 @@ pub(crate) async fn run(args: Args, config: Config) -> Result<()> {
         .filter_map(|mut container| {
             container
                 .labels
-                .service
+                .and_then(|labels| labels.service)
                 .and_then(|service| container.names.pop_front().map(|name| (service, name)))
         })
         .into_group_map();

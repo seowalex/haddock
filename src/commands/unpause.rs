@@ -14,19 +14,14 @@ use crate::{
     progress::{Finish, Progress},
 };
 
-/// Stop services
+/// Pause services
 #[derive(clap::Args, Debug)]
 #[command(next_display_order = None)]
 pub(crate) struct Args {
-    pub(crate) services: Vec<String>,
-
-    /// Specify a shutdown timeout in seconds
-    #[arg(short, long, default_value_t = 10)]
-    pub(crate) timeout: u32,
+    services: Vec<String>,
 }
 
-pub(crate) async fn stop_containers(
-    args: &Args,
+pub(crate) async fn pause_containers(
     podman: &Podman,
     progress: &Progress,
     file: &Compose,
@@ -67,7 +62,7 @@ pub(crate) async fn stop_containers(
                 .iter()
                 .map(|container| async move {
                     let spinner =
-                        progress.add_spinner(format!("Container {container}"), "Stopping");
+                        progress.add_spinner(format!("Container {container}"), "Unpausing");
                     let mut rx = txs[service].subscribe();
 
                     barrier.wait().await;
@@ -77,9 +72,9 @@ pub(crate) async fn stop_containers(
                     }
 
                     podman
-                        .run(["stop", "--time", &args.timeout.to_string(), container])
+                        .run(["unpause", container])
                         .await
-                        .finish_with_message(spinner, "Stopped")
+                        .finish_with_message(spinner, "Unpaused")
                 })
                 .collect::<FuturesUnordered<_>>()
                 .try_collect::<Vec<_>>()
@@ -109,6 +104,8 @@ pub(crate) async fn run(args: Args, config: Config) -> Result<()> {
             "--format",
             "json",
             "--filter",
+            "status=paused",
+            "--filter",
             &format!("pod={name}"),
         ])
         .await?;
@@ -133,7 +130,7 @@ pub(crate) async fn run(args: Args, config: Config) -> Result<()> {
     if !containers.is_empty() {
         let progress = Progress::new(&config);
 
-        stop_containers(&args, &podman, &progress, &file, &containers).await?;
+        pause_containers(&podman, &progress, &file, &containers).await?;
 
         progress.finish();
     }
