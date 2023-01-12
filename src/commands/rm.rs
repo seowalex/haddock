@@ -19,22 +19,22 @@ use crate::{
 #[derive(clap::Args, Debug)]
 #[command(next_display_order = None)]
 pub(crate) struct Args {
-    services: Vec<String>,
+    pub(crate) services: Vec<String>,
 
     /// Don't ask to confirm removal
     #[arg(short, long)]
-    force: bool,
+    pub(crate) force: bool,
 
     /// Stop the containers, if required, before removing
     #[arg(short, long)]
-    stop: bool,
+    pub(crate) stop: bool,
 
     /// Remove any anonymous volumes attached to containers
     #[arg(short, long)]
-    volumes: bool,
+    pub(crate) volumes: bool,
 }
 
-async fn remove_containers(
+pub(crate) async fn remove_containers(
     args: &Args,
     podman: &Podman,
     progress: &Progress,
@@ -61,7 +61,8 @@ async fn remove_containers(
                 .count()
         })
         .max()
-        .unwrap_or_default();
+        .unwrap_or_default()
+        .max(1);
     let txs = &containers
         .keys()
         .map(|service| (service, broadcast::channel(capacity).0))
@@ -134,7 +135,9 @@ pub(crate) async fn run(args: Args, config: Config) -> Result<()> {
         .into_iter()
         .filter_map(|mut container| {
             container.labels.service.and_then(|service| {
-                if file.services.keys().contains(&service) {
+                if args.services.contains(&service)
+                    || (args.services.is_empty() && file.services.keys().contains(&service))
+                {
                     container.names.pop_front().map(|name| (service, name))
                 } else {
                     None

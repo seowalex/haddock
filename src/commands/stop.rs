@@ -18,14 +18,14 @@ use crate::{
 #[derive(clap::Args, Debug)]
 #[command(next_display_order = None)]
 pub(crate) struct Args {
-    services: Vec<String>,
+    pub(crate) services: Vec<String>,
 
     /// Specify a shutdown timeout in seconds
     #[arg(short, long, default_value_t = 10)]
-    timeout: u32,
+    pub(crate) timeout: u32,
 }
 
-async fn stop_containers(
+pub(crate) async fn stop_containers(
     args: &Args,
     podman: &Podman,
     progress: &Progress,
@@ -52,7 +52,8 @@ async fn stop_containers(
                 .count()
         })
         .max()
-        .unwrap_or_default();
+        .unwrap_or_default()
+        .max(1);
     let txs = &containers
         .keys()
         .map(|service| (service, broadcast::channel(capacity).0))
@@ -121,7 +122,9 @@ pub(crate) async fn run(args: Args, config: Config) -> Result<()> {
         .into_iter()
         .filter_map(|mut container| {
             container.labels.service.and_then(|service| {
-                if file.services.keys().contains(&service) {
+                if args.services.contains(&service)
+                    || (args.services.is_empty() && file.services.keys().contains(&service))
+                {
                     container.names.pop_front().map(|name| (service, name))
                 } else {
                     None

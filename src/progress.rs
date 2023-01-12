@@ -138,13 +138,6 @@ impl<T> Finish for Result<T> {
 }
 
 impl Spinner {
-    pub(crate) fn finish_and_clear(&self) {
-        self.inner.finish_and_clear();
-
-        self.header
-            .set_length(self.header.length().unwrap_or_default() - 1);
-    }
-
     pub(crate) fn finish_with_message(&self, message: impl Into<Cow<'static, str>>) {
         self.inner.set_style(SPINNER_FINISHED_STYLE.clone());
         self.inner.finish_with_message(message);

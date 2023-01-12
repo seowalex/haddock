@@ -19,6 +19,11 @@ pub(crate) struct ContainerLabels {
 }
 
 #[derive(Deserialize, Debug)]
+pub(crate) struct Network {
+    pub(crate) name: String,
+}
+
+#[derive(Deserialize, Debug)]
 #[serde(rename_all = "PascalCase")]
 pub(crate) struct Version {
     pub(crate) client: VersionClient,
@@ -28,4 +33,10 @@ pub(crate) struct Version {
 #[serde(rename_all = "PascalCase")]
 pub(crate) struct VersionClient {
     pub(crate) version: semver::Version,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "PascalCase")]
+pub(crate) struct Volume {
+    pub(crate) name: String,
 }
