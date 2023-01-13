@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `stop` command.
 - `pause` command.
 - `unpause` command.
+- `top` command.
+- `ps` command.
 - `convert` command.
 - `version` command.
 - `help` command.

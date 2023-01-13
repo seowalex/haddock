@@ -14,14 +14,14 @@ use crate::{
     progress::{Finish, Progress},
 };
 
-/// Pause services
+/// Unpause services
 #[derive(clap::Args, Debug)]
 #[command(next_display_order = None)]
 pub(crate) struct Args {
     services: Vec<String>,
 }
 
-pub(crate) async fn pause_containers(
+pub(crate) async fn unpause_containers(
     podman: &Podman,
     progress: &Progress,
     file: &Compose,
@@ -130,7 +130,7 @@ pub(crate) async fn run(args: Args, config: Config) -> Result<()> {
     if !containers.is_empty() {
         let progress = Progress::new(&config);
 
-        pause_containers(&podman, &progress, &file, &containers).await?;
+        unpause_containers(&podman, &progress, &file, &containers).await?;
 
         progress.finish();
     }

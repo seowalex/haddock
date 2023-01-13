@@ -930,7 +930,7 @@ impl Display for Port {
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "lowercase")]
 pub(crate) enum PullPolicy {
     Always,
     Never,
@@ -1116,7 +1116,7 @@ impl Display for ServiceVolume {
 #[skip_serializing_none]
 #[serde_as]
 #[derive(Serialize, Deserialize, Debug)]
-#[serde(tag = "type", content = "source", rename_all = "snake_case")]
+#[serde(tag = "type", content = "source", rename_all = "lowercase")]
 pub(crate) enum ServiceVolumeType {
     Volume(#[serde_as(as = "Option<DisplayFromAny>")] Option<String>),
     Bind(#[serde_as(as = "PickFirst<(AbsPathBuf, DisplayFromAny)>")] PathBuf),
