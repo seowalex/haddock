@@ -1,11 +1,19 @@
 pub(crate) mod types;
 
-use std::{ffi::OsStr, path::PathBuf};
+use std::{ffi::OsStr, path::PathBuf, pin::Pin, process::Stdio};
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{anyhow, bail, Context, Error, Result};
+use futures::{
+    stream::{self, select},
+    Stream, StreamExt, TryStreamExt,
+};
 use itertools::Itertools;
 use once_cell::sync::Lazy;
-use tokio::process::Command;
+use tokio::{
+    io::{AsyncBufReadExt, BufReader},
+    process::Command,
+};
+use tokio_stream::wrappers::LinesStream;
 
 use self::types::Version;
 use crate::config::Config;
@@ -40,6 +48,17 @@ impl Podman {
         Ok(podman)
     }
 
+    fn command<I, S>(&self, args: I) -> Command
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>,
+    {
+        let mut command = Command::new("podman");
+        command.current_dir(&self.project_directory).args(args);
+
+        command
+    }
+
     pub(crate) async fn run<I, S>(&self, args: I) -> Result<String>
     where
         I: IntoIterator<Item = S>,
@@ -64,8 +83,7 @@ impl Podman {
         I: IntoIterator<Item = S>,
         S: AsRef<OsStr>,
     {
-        let mut command = Command::new("podman");
-        command.current_dir(&self.project_directory).args(args);
+        let mut command = self.command(args);
 
         let output = command.output().await.with_context(|| {
             anyhow!(
@@ -93,6 +111,36 @@ impl Podman {
                         .join(" ")
                 )),
             )
+        }
+    }
+
+    pub(crate) fn watch<I, S>(&self, args: I) -> Result<Pin<Box<dyn Stream<Item = Result<String>>>>>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>,
+    {
+        if self.dry_run {
+            println!(
+                "`podman {}`",
+                args.into_iter()
+                    .map(|arg| arg.as_ref().to_string_lossy().to_string())
+                    .join(" "),
+            );
+
+            Ok(stream::empty().boxed())
+        } else {
+            let child = self
+                .command(args)
+                .stdin(Stdio::null())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()?;
+            let stdout = BufReader::new(child.stdout.unwrap()).lines();
+            let stderr = BufReader::new(child.stderr.unwrap()).lines();
+
+            Ok(select(LinesStream::new(stdout), LinesStream::new(stderr))
+                .map_err(Error::from)
+                .boxed())
         }
     }
 }

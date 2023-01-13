@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `pause` command.
 - `unpause` command.
 - `cp` command.
+- `events` command.
 - `top` command.
 - `ps` command.
 - `convert` command.
