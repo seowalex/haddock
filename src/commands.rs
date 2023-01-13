@@ -1,4 +1,5 @@
 mod convert;
+mod cp;
 mod down;
 mod pause;
 mod ps;
@@ -22,6 +23,7 @@ pub(crate) enum Command {
     Stop(stop::Args),
     Pause(pause::Args),
     Unpause(unpause::Args),
+    Cp(cp::Args),
     Top(top::Args),
     Ps(ps::Args),
     Convert(convert::Args),
@@ -36,6 +38,7 @@ pub(crate) async fn run(command: Command, config: Config) -> Result<()> {
         Command::Stop(args) => stop::run(args, config).await?,
         Command::Pause(args) => pause::run(args, config).await?,
         Command::Unpause(args) => unpause::run(args, config).await?,
+        Command::Cp(args) => cp::run(args, config).await?,
         Command::Top(args) => top::run(args, config).await?,
         Command::Ps(args) => ps::run(args, config).await?,
         Command::Convert(args) => convert::run(args, config)?,

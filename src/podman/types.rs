@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 
 use serde::Deserialize;
-use serde_with::with_prefix;
+use serde_with::{serde_as, with_prefix, DisplayFromStr};
 
 with_prefix!(prefix_io_podman_compose "io.podman.compose.");
 
@@ -13,9 +13,13 @@ pub(crate) struct Container {
     pub(crate) names: VecDeque<String>,
 }
 
+#[serde_as]
 #[derive(Deserialize, Debug)]
+#[serde(rename_all = "kebab-case")]
 pub(crate) struct ContainerLabels {
     pub(crate) service: Option<String>,
+    #[serde_as(as = "Option<DisplayFromStr>")]
+    pub(crate) container_number: Option<usize>,
 }
 
 #[derive(Deserialize, Debug)]
