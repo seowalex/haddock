@@ -18,19 +18,19 @@ use crate::{
 #[derive(clap::Args, Debug)]
 #[command(next_display_order = None)]
 pub(crate) struct Args {
-    pub(crate) services: Vec<String>,
+    services: Vec<String>,
 
     /// Specify a shutdown timeout in seconds
     #[arg(short, long, default_value_t = 10)]
-    pub(crate) timeout: u32,
+    timeout: u32,
 }
 
 pub(crate) async fn stop_containers(
-    args: &Args,
     podman: &Podman,
     progress: &Progress,
     file: &Compose,
     containers: &HashMap<String, Vec<String>>,
+    timeout: u32,
 ) -> Result<()> {
     let dependencies = &file
         .services
@@ -77,7 +77,7 @@ pub(crate) async fn stop_containers(
                     }
 
                     podman
-                        .run(["stop", "--time", &args.timeout.to_string(), container])
+                        .run(["stop", "--time", &timeout.to_string(), container])
                         .await
                         .finish_with_message(spinner, "Stopped")
                 })
@@ -133,7 +133,7 @@ pub(crate) async fn run(args: Args, config: Config) -> Result<()> {
     if !containers.is_empty() {
         let progress = Progress::new(&config);
 
-        stop_containers(&args, &podman, &progress, &file, &containers).await?;
+        stop_containers(&podman, &progress, &file, &containers, args.timeout).await?;
 
         progress.finish();
     }

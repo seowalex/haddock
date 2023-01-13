@@ -19,27 +19,28 @@ use crate::{
 #[derive(clap::Args, Debug)]
 #[command(next_display_order = None)]
 pub(crate) struct Args {
-    pub(crate) services: Vec<String>,
+    services: Vec<String>,
 
     /// Don't ask to confirm removal
     #[arg(short, long)]
-    pub(crate) force: bool,
+    force: bool,
 
     /// Stop the containers, if required, before removing
     #[arg(short, long)]
-    pub(crate) stop: bool,
+    stop: bool,
 
     /// Remove any anonymous volumes attached to containers
     #[arg(short, long)]
-    pub(crate) volumes: bool,
+    volumes: bool,
 }
 
 pub(crate) async fn remove_containers(
-    args: &Args,
     podman: &Podman,
     progress: &Progress,
     file: &Compose,
     containers: &HashMap<String, Vec<String>>,
+    stop: bool,
+    volumes: bool,
 ) -> Result<()> {
     let dependencies = &file
         .services
@@ -89,12 +90,8 @@ pub(crate) async fn remove_containers(
                         .run(
                             ["rm"]
                                 .into_iter()
-                                .chain(if args.stop { vec!["--force"] } else { vec![] })
-                                .chain(if args.volumes {
-                                    vec!["--volumes"]
-                                } else {
-                                    vec![]
-                                })
+                                .chain(if stop { vec!["--force"] } else { vec![] })
+                                .chain(if volumes { vec!["--volumes"] } else { vec![] })
                                 .chain([container.as_str()]),
                         )
                         .await
@@ -160,7 +157,15 @@ pub(crate) async fn run(args: Args, config: Config) -> Result<()> {
     {
         let progress = Progress::new(&config);
 
-        remove_containers(&args, &podman, &progress, &file, &containers).await?;
+        remove_containers(
+            &podman,
+            &progress,
+            &file,
+            &containers,
+            args.stop,
+            args.volumes,
+        )
+        .await?;
 
         progress.finish();
     }
