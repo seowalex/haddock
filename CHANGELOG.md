@@ -12,7 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `docker compose` flags.
 - `down` command.
 - `rm` command.
+- `start` command.
 - `stop` command.
+- `restart` command.
 - `kill` command.
 - `pause` command.
 - `unpause` command.

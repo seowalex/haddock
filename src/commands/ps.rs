@@ -102,7 +102,7 @@ pub(crate) async fn run(args: Args, config: Config) -> Result<()> {
         }
     } else {
         let filters = if containers.is_empty() {
-            vec![String::from("name=^$")]
+            vec![String::from("name=")]
                 .into_iter()
                 .chain(filters)
                 .collect::<Vec<_>>()

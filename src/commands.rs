@@ -8,7 +8,9 @@ mod ls;
 mod pause;
 mod port;
 mod ps;
+mod restart;
 mod rm;
+mod start;
 mod stop;
 mod top;
 mod unpause;
@@ -25,7 +27,9 @@ pub(crate) enum Command {
     Up(up::Args),
     Down(down::Args),
     Rm(rm::Args),
+    Start(start::Args),
     Stop(stop::Args),
+    Restart(restart::Args),
     Kill(kill::Args),
     Pause(pause::Args),
     Unpause(unpause::Args),
@@ -45,7 +49,9 @@ pub(crate) async fn run(command: Command, config: Config) -> Result<()> {
         Command::Up(args) => up::run(args, config).await?,
         Command::Down(args) => down::run(args, config).await?,
         Command::Rm(args) => rm::run(args, config).await?,
+        Command::Start(args) => start::run(args, config).await?,
         Command::Stop(args) => stop::run(args, config).await?,
+        Command::Restart(args) => restart::run(args, config).await?,
         Command::Kill(args) => kill::run(args, config).await?,
         Command::Pause(args) => pause::run(args, config).await?,
         Command::Unpause(args) => unpause::run(args, config).await?,
