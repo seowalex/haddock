@@ -3,6 +3,7 @@ mod cp;
 mod down;
 mod events;
 mod images;
+mod kill;
 mod pause;
 mod ps;
 mod rm;
@@ -23,6 +24,7 @@ pub(crate) enum Command {
     Down(down::Args),
     Rm(rm::Args),
     Stop(stop::Args),
+    Kill(kill::Args),
     Pause(pause::Args),
     Unpause(unpause::Args),
     Cp(cp::Args),
@@ -40,6 +42,7 @@ pub(crate) async fn run(command: Command, config: Config) -> Result<()> {
         Command::Down(args) => down::run(args, config).await?,
         Command::Rm(args) => rm::run(args, config).await?,
         Command::Stop(args) => stop::run(args, config).await?,
+        Command::Kill(args) => kill::run(args, config).await?,
         Command::Pause(args) => pause::run(args, config).await?,
         Command::Unpause(args) => unpause::run(args, config).await?,
         Command::Cp(args) => cp::run(args, config).await?,
