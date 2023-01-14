@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `events` command.
 - `top` command.
 - `ps` command.
+- `images` command.
 - `convert` command.
 - `version` command.
 - `help` command.

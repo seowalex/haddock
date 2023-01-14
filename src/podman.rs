@@ -68,7 +68,15 @@ impl Podman {
             println!(
                 "`podman {}`",
                 args.into_iter()
-                    .map(|arg| arg.as_ref().to_string_lossy().to_string())
+                    .map(|arg| {
+                        let arg = arg.as_ref().to_string_lossy();
+
+                        if arg.contains(char::is_whitespace) {
+                            format!("\"{arg}\"")
+                        } else {
+                            arg.to_string()
+                        }
+                    })
                     .join(" "),
             );
 
@@ -123,7 +131,15 @@ impl Podman {
             println!(
                 "`podman {}`",
                 args.into_iter()
-                    .map(|arg| arg.as_ref().to_string_lossy().to_string())
+                    .map(|arg| {
+                        let arg = arg.as_ref().to_string_lossy();
+
+                        if arg.contains(char::is_whitespace) {
+                            format!("\"{arg}\"")
+                        } else {
+                            arg.to_string()
+                        }
+                    })
                     .join(" "),
             );
 

@@ -1,5 +1,4 @@
 use anyhow::Result;
-use clap::ValueEnum;
 use futures::stream::TryStreamExt;
 use indexmap::IndexSet;
 use itertools::Itertools;
@@ -21,28 +20,13 @@ pub(crate) struct Args {
     json: bool,
 }
 
-#[derive(ValueEnum, PartialEq, Clone, Debug)]
-enum Format {
-    Table,
-    Json,
-}
-
-#[derive(ValueEnum, Clone, Debug)]
-enum Status {
-    Created,
-    Exited,
-    Paused,
-    Running,
-    Unknown,
-}
-
 pub(crate) async fn run(args: Args, config: Config) -> Result<()> {
     let podman = Podman::new(&config).await?;
     let file = compose::parse(&config, false)?;
     let name = file.name.as_ref().unwrap();
 
     let output = podman
-        .run([
+        .force_run([
             "ps",
             "--all",
             "--format",

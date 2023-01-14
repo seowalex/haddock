@@ -2,6 +2,7 @@ mod convert;
 mod cp;
 mod down;
 mod events;
+mod images;
 mod pause;
 mod ps;
 mod rm;
@@ -28,6 +29,7 @@ pub(crate) enum Command {
     Events(events::Args),
     Top(top::Args),
     Ps(ps::Args),
+    Images(images::Args),
     Convert(convert::Args),
     Version(version::Args),
 }
@@ -44,6 +46,7 @@ pub(crate) async fn run(command: Command, config: Config) -> Result<()> {
         Command::Events(args) => events::run(args, config).await?,
         Command::Top(args) => top::run(args, config).await?,
         Command::Ps(args) => ps::run(args, config).await?,
+        Command::Images(args) => images::run(args, config).await?,
         Command::Convert(args) => convert::run(args, config)?,
         Command::Version(args) => version::run(args),
     };
