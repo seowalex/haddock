@@ -21,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `top` command.
 - `ps` command.
 - `images` command.
+- `ls` command.
+- `port` command.
 - `convert` command.
 - `version` command.
 - `help` command.

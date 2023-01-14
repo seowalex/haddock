@@ -53,7 +53,7 @@ pub(crate) async fn run(args: Args, config: Config) -> Result<()> {
         .filter_map(|mut container| {
             container.labels.and_then(|labels| {
                 labels.service.and_then(|service| {
-                    if (args
+                    if args
                         .source
                         .0
                         .as_ref()
@@ -64,8 +64,7 @@ pub(crate) async fn run(args: Args, config: Config) -> Result<()> {
                             .0
                             .as_ref()
                             .map(|destination| *destination == service)
-                            .unwrap_or_default())
-                        && file.services.keys().contains(&service)
+                            .unwrap_or_default()
                     {
                         container
                             .names

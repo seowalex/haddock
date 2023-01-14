@@ -4,7 +4,9 @@ mod down;
 mod events;
 mod images;
 mod kill;
+mod ls;
 mod pause;
+mod port;
 mod ps;
 mod rm;
 mod stop;
@@ -32,6 +34,8 @@ pub(crate) enum Command {
     Top(top::Args),
     Ps(ps::Args),
     Images(images::Args),
+    Ls(ls::Args),
+    Port(port::Args),
     Convert(convert::Args),
     Version(version::Args),
 }
@@ -50,6 +54,8 @@ pub(crate) async fn run(command: Command, config: Config) -> Result<()> {
         Command::Top(args) => top::run(args, config).await?,
         Command::Ps(args) => ps::run(args, config).await?,
         Command::Images(args) => images::run(args, config).await?,
+        Command::Ls(args) => ls::run(args, config).await?,
+        Command::Port(args) => port::run(args, config).await?,
         Command::Convert(args) => convert::run(args, config)?,
         Command::Version(args) => version::run(args),
     };
