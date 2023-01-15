@@ -19,19 +19,19 @@ use crate::{
 #[derive(clap::Args, Debug)]
 #[command(next_display_order = None)]
 pub(crate) struct Args {
-    services: Vec<String>,
+    pub(crate) services: Vec<String>,
 
     /// Don't ask to confirm removal
     #[arg(short, long)]
-    force: bool,
+    pub(crate) force: bool,
 
     /// Stop the containers, if required, before removing
     #[arg(short, long)]
-    stop: bool,
+    pub(crate) stop: bool,
 
     /// Remove any anonymous volumes attached to containers
     #[arg(short, long)]
-    volumes: bool,
+    pub(crate) volumes: bool,
 }
 
 pub(crate) async fn remove_containers(
@@ -39,8 +39,7 @@ pub(crate) async fn remove_containers(
     progress: &Progress,
     file: &Compose,
     containers: &HashMap<String, Vec<String>>,
-    stop: bool,
-    volumes: bool,
+    args: Args,
 ) -> Result<()> {
     let dependencies = &file
         .services
@@ -91,8 +90,12 @@ pub(crate) async fn remove_containers(
                         .run(
                             ["rm"]
                                 .into_iter()
-                                .chain(if stop { vec!["--force"] } else { vec![] })
-                                .chain(if volumes { vec!["--volumes"] } else { vec![] })
+                                .chain(if args.stop { vec!["--force"] } else { vec![] })
+                                .chain(if args.volumes {
+                                    vec!["--volumes"]
+                                } else {
+                                    vec![]
+                                })
                                 .chain([container.as_str()]),
                         )
                         .await
@@ -158,15 +161,7 @@ pub(crate) async fn run(args: Args, config: Config) -> Result<()> {
     {
         let progress = Progress::new(&config);
 
-        remove_containers(
-            &podman,
-            &progress,
-            &file,
-            &containers,
-            args.stop,
-            args.volumes,
-        )
-        .await?;
+        remove_containers(&podman, &progress, &file, &containers, args).await?;
 
         progress.finish();
     }

@@ -21,7 +21,7 @@ pub(crate) struct Args {
     services: Vec<String>,
 }
 
-pub(crate) async fn pause_containers(
+async fn pause_containers(
     podman: &Podman,
     progress: &Progress,
     file: &Compose,

@@ -32,6 +32,20 @@ pub(crate) struct Network {
 
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "PascalCase")]
+pub(crate) struct Pod {
+    #[serde(with = "prefix_io_podman_compose")]
+    pub(crate) labels: Option<PodLabels>,
+}
+
+#[serde_as]
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) struct PodLabels {
+    pub(crate) config_hash: Option<String>,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "PascalCase")]
 pub(crate) struct Version {
     pub(crate) client: VersionClient,
 }

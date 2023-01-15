@@ -1,4 +1,5 @@
 use std::{
+    collections::VecDeque,
     env,
     fmt::{self, Display, Formatter},
     mem,
@@ -15,12 +16,16 @@ use tokio::sync::{broadcast, Barrier};
 use tokio_stream::wrappers::BroadcastStream;
 
 use crate::{
+    commands::rm::{self, remove_containers},
     compose::{
         self,
         types::{Compose, FileReference, ServiceVolume, ServiceVolumeType},
     },
     config::Config,
-    podman::Podman,
+    podman::{
+        types::{Container, Pod},
+        Podman,
+    },
     progress::{Finish, Progress},
     utils::Digest,
 };
@@ -44,11 +49,11 @@ pub(crate) struct Args {
     pull: Option<PullPolicy>,
 
     /// Recreate containers even if their configuration and image haven't changed
-    #[arg(long, conflicts_with = "no_recreate")]
+    #[arg(long, conflicts_with_all = ["services", "no_recreate"])]
     force_recreate: bool,
 
     /// If containers already exist, don't recreate them
-    #[arg(long, conflicts_with = "force_recreate")]
+    #[arg(long)]
     no_recreate: bool,
 
     /// Remove containers for services not defined in the Compose file
@@ -70,7 +75,13 @@ impl Display for PullPolicy {
     }
 }
 
-async fn create_pod(podman: &Podman, config: &Config, labels: &[String], name: &str) -> Result<()> {
+async fn create_pod(
+    podman: &Podman,
+    config: &Config,
+    file: &Compose,
+    labels: &[String],
+    name: &str,
+) -> Result<()> {
     if podman.force_run(["pod", "exists", name]).await.is_err() {
         let pod_labels = [
             (
@@ -89,6 +100,7 @@ async fn create_pod(podman: &Podman, config: &Config, labels: &[String], name: &
                 "project.environment_file",
                 config.env_file.to_string_lossy().as_ref(),
             ),
+            ("config-hash", &file.digest()),
         ]
         .into_iter()
         .map(|label| format!("io.podman.compose.{}={}", label.0, label.1))
@@ -246,8 +258,7 @@ async fn create_containers(
     file: &Compose,
     labels: &[String],
     name: &str,
-    services: &[String],
-    pull: Option<&PullPolicy>,
+    args: Args,
 ) -> Result<()> {
     let mut dependencies = file
         .services
@@ -261,11 +272,12 @@ async fn create_containers(
         })
         .collect::<DiGraphMap<_, _>>();
 
-    if !services.is_empty() {
+    if !(args.force_recreate || args.services.is_empty()) {
         let mut nodes = Vec::new();
 
         for node in dependencies.nodes() {
-            if !services
+            if !args
+                .services
                 .iter()
                 .any(|service| has_path_connecting(&dependencies, node, service, None))
             {
@@ -278,7 +290,6 @@ async fn create_containers(
         }
     }
 
-    let dependencies = &dependencies;
     let capacity = dependencies
         .nodes()
         .map(|service| {
@@ -320,6 +331,9 @@ async fn create_containers(
             .sum(),
     );
 
+    let dependencies = &dependencies;
+    let args = &args;
+
     file.services
         .iter()
         .filter_map(|(service_name, service)| {
@@ -358,21 +372,21 @@ async fn create_containers(
                                 let container_labels = [
                                     ("service", service_name),
                                     ("container-number", &i.to_string()),
-                                    ("config-hash", &service.digest()),
                                 ]
                                 .into_iter()
                                 .map(|label| format!("io.podman.compose.{}={}", label.0, label.1))
                                 .collect::<Vec<_>>();
                                 let (global_args, service_args) = service.to_args();
-                                let pull_policy = pull.map(ToString::to_string).or_else(|| {
-                                    service.pull_policy.as_ref().and_then(|pull_policy| {
-                                        if *pull_policy == compose::types::PullPolicy::Build {
-                                            None
-                                        } else {
-                                            Some(pull_policy.to_string())
-                                        }
-                                    })
-                                });
+                                let pull_policy =
+                                    args.pull.as_ref().map(ToString::to_string).or_else(|| {
+                                        service.pull_policy.as_ref().and_then(|pull_policy| {
+                                            if *pull_policy == compose::types::PullPolicy::Build {
+                                                None
+                                            } else {
+                                                Some(pull_policy.to_string())
+                                            }
+                                        })
+                                    });
 
                                 podman
                                     .run(
@@ -439,16 +453,75 @@ pub(crate) async fn run(args: Args, config: Config) -> Result<()> {
         .into_iter()
         .map(|label| format!("io.podman.compose.{}={}", label.0, label.1))
         .collect::<Vec<_>>();
+    let pod_filter = format!("name=^{name}$");
+    let container_filter = format!("pod={name}");
     let progress = Progress::new(&config);
 
-    try_join!(
-        create_pod(&podman, &config, &labels, name),
+    let (pod, containers, ..) = try_join!(
+        podman.force_run(["pod", "ps", "--format", "json", "--filter", &pod_filter]),
+        podman.force_run([
+            "ps",
+            "--all",
+            "--format",
+            "json",
+            "--filter",
+            &container_filter
+        ]),
+        create_pod(&podman, &config, &file, &labels, name),
         create_networks(&podman, &progress, &file, &labels),
         create_volumes(&podman, &progress, &file, &labels),
-        create_secrets(&podman, &progress, &file, &labels)
+        create_secrets(&podman, &progress, &file, &labels),
     )?;
 
     progress.finish();
+
+    let config_hash = serde_json::from_str::<VecDeque<Pod>>(&pod)?
+        .pop_front()
+        .and_then(|pod| pod.labels.and_then(|labels| labels.config_hash));
+    let containers = serde_json::from_str::<Vec<Container>>(&containers)?
+        .into_iter()
+        .filter_map(|mut container| {
+            container
+                .labels
+                .and_then(|labels| labels.service)
+                .and_then(|service| {
+                    if args.force_recreate
+                        || args.services.contains(&service)
+                        || (args.services.is_empty() && file.services.keys().contains(&service))
+                    {
+                        container.names.pop_front().map(|name| (service, name))
+                    } else {
+                        None
+                    }
+                })
+        })
+        .into_group_map();
+
+    if (args.force_recreate
+        || config_hash
+            .clone()
+            .map(|config_hash| config_hash != file.digest())
+            .unwrap_or_default())
+        && !containers.is_empty()
+    {
+        let progress = Progress::new(&config);
+
+        remove_containers(
+            &podman,
+            &progress,
+            &file,
+            &containers,
+            rm::Args {
+                services: Vec::new(),
+                force: true,
+                stop: true,
+                volumes: true,
+            },
+        )
+        .await?;
+
+        progress.finish();
+    }
 
     for service in file.services.values_mut() {
         service.networks = mem::take(&mut service.networks)
@@ -478,16 +551,7 @@ pub(crate) async fn run(args: Args, config: Config) -> Result<()> {
 
     let progress = Progress::new(&config);
 
-    create_containers(
-        &podman,
-        &progress,
-        &file,
-        &labels,
-        name,
-        &args.services,
-        args.pull.as_ref(),
-    )
-    .await?;
+    create_containers(&podman, &progress, &file, &labels, name, args).await?;
 
     progress.finish();
 

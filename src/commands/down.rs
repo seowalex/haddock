@@ -3,7 +3,10 @@ use futures::{future::try_join3, stream::FuturesUnordered, try_join, TryStreamEx
 use itertools::Itertools;
 
 use crate::{
-    commands::{rm::remove_containers, stop::stop_containers},
+    commands::{
+        rm::{self, remove_containers},
+        stop::{self, stop_containers},
+    },
     compose,
     config::Config,
     podman::{
@@ -149,13 +152,35 @@ pub(crate) async fn run(args: Args, config: Config) -> Result<()> {
     if !containers.is_empty() {
         let progress = Progress::new(&config);
 
-        stop_containers(&podman, &progress, &file, &containers, args.timeout).await?;
+        stop_containers(
+            &podman,
+            &progress,
+            &file,
+            &containers,
+            stop::Args {
+                services: Vec::new(),
+                timeout: args.timeout,
+            },
+        )
+        .await?;
 
         progress.finish();
 
         let progress = Progress::new(&config);
 
-        remove_containers(&podman, &progress, &file, &containers, false, args.volumes).await?;
+        remove_containers(
+            &podman,
+            &progress,
+            &file,
+            &containers,
+            rm::Args {
+                services: Vec::new(),
+                force: true,
+                stop: false,
+                volumes: args.volumes,
+            },
+        )
+        .await?;
 
         progress.finish();
     }
