@@ -9,6 +9,7 @@ use crate::config::Config;
 pub(crate) enum Command {
     Up(up::Args),
     Down(down::Args),
+    Create(create::Args),
     Rm(rm::Args),
     Start(start::Args),
     Stop(stop::Args),
@@ -31,6 +32,7 @@ pub(crate) async fn run(command: Command, config: Config) -> Result<()> {
     match command {
         Command::Up(args) => up::run(args, config).await?,
         Command::Down(args) => down::run(args, config).await?,
+        Command::Create(args) => create::run(args, config).await?,
         Command::Rm(args) => rm::run(args, config).await?,
         Command::Start(args) => start::run(args, config).await?,
         Command::Stop(args) => stop::run(args, config).await?,

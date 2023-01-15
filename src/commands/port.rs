@@ -1,3 +1,5 @@
+use std::fmt::{self, Display, Formatter};
+
 use anyhow::{anyhow, bail, Result};
 use clap::ValueEnum;
 
@@ -26,6 +28,12 @@ pub(crate) struct Args {
 enum Protocol {
     Tcp,
     Udp,
+}
+
+impl Display for Protocol {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", format!("{self:?}").to_ascii_lowercase())
+    }
 }
 
 pub(crate) async fn run(args: Args, config: Config) -> Result<()> {
@@ -79,11 +87,7 @@ pub(crate) async fn run(args: Args, config: Config) -> Result<()> {
             .run([
                 "port",
                 &container,
-                &format!(
-                    "{}/{}",
-                    args.port,
-                    format!("{:?}", args.protocol).to_ascii_lowercase()
-                )
+                &format!("{}/{}", args.port, args.protocol)
             ])
             .await?
     );

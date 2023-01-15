@@ -18,6 +18,7 @@ use serde::{
 use serde_with::{
     de::DeserializeAsWrap, formats::Separator, ser::SerializeAsWrap, DeserializeAs, SerializeAs,
 };
+use sha2::{Digest as _, Sha256};
 
 pub(crate) static STYLED_WARNING: Lazy<StyledObject<&str>> =
     Lazy::new(|| style("Warning:").yellow().bold());
@@ -44,6 +45,20 @@ macro_rules! regex {
 }
 
 pub(crate) use regex;
+
+pub(crate) trait Digest
+where
+    Self: Serialize,
+{
+    fn digest(&self) -> String {
+        format!(
+            "{:x}",
+            Sha256::digest(serde_yaml::to_string(self).unwrap().as_bytes())
+        )
+    }
+}
+
+impl<T> Digest for T where T: Serialize {}
 
 pub(crate) struct DisplayFromAny;
 

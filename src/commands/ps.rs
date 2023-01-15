@@ -1,3 +1,5 @@
+use std::fmt::{self, Display, Formatter};
+
 use anyhow::Result;
 use clap::ValueEnum;
 use itertools::Itertools;
@@ -54,6 +56,12 @@ enum Status {
     Unknown,
 }
 
+impl Display for Status {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", format!("{self:?}").to_ascii_lowercase())
+    }
+}
+
 pub(crate) async fn run(args: Args, config: Config) -> Result<()> {
     let podman = Podman::new(&config).await?;
     let file = compose::parse(&config, false)?;
@@ -62,7 +70,7 @@ pub(crate) async fn run(args: Args, config: Config) -> Result<()> {
     let filters = args
         .status
         .into_iter()
-        .map(|status| format!("status={status:?}").to_ascii_lowercase())
+        .map(|status| format!("status={status}"))
         .chain(args.filter)
         .collect::<Vec<_>>();
     let output = podman
