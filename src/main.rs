@@ -1,9 +1,4 @@
-mod commands;
-mod compose;
-mod config;
-mod podman;
-mod progress;
-mod utils;
+automod::dir!("src");
 
 use std::{env, path::PathBuf};
 

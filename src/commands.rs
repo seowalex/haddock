@@ -1,21 +1,4 @@
-mod convert;
-mod cp;
-mod down;
-mod events;
-mod images;
-mod kill;
-mod ls;
-mod pause;
-mod port;
-mod ps;
-mod restart;
-mod rm;
-mod start;
-mod stop;
-mod top;
-mod unpause;
-mod up;
-mod version;
+automod::dir!("src/commands");
 
 use anyhow::Result;
 use clap::Subcommand;

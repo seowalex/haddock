@@ -10,16 +10,17 @@ categories = ["command-line-utilities"]
 
 [dependencies]
 anyhow = "1.0.68"
+automod = "1.0.6"
 byte-unit = { version = "4.0.18", default-features = false, features = ["serde", "std"] }
 clap = { version = "4.1.1", features = ["cargo", "derive"] }
-console = "0.15.4"
+console = "0.15.5"
 dotenvy = "0.15.6"
 figment = { version = "0.10.8", features = ["env"] }
 futures = "0.3.25"
 heck = "0.4.0"
 humantime = "2.1.0"
 indexmap = { version = "1.9.2", features = ["serde"] }
-indicatif = "0.17.2"
+indicatif = "0.17.3"
 inquire = "0.5.3"
 itertools = "0.10.5"
 nom = "7.1.2"

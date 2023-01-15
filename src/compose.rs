@@ -1,5 +1,4 @@
-mod parser;
-pub(crate) mod types;
+automod::dir!(pub(crate) "src/compose");
 
 use std::{
     env::{self, VarError},

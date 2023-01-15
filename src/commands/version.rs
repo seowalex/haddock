@@ -22,7 +22,7 @@ enum Format {
 
 pub(crate) fn run(args: Args) {
     if args.short {
-        println!(crate_version!());
+        println!("{}", crate_version!());
     } else {
         match args.format {
             Format::Pretty => println!("{} {}", crate_name!(), crate_version!()),

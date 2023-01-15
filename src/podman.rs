@@ -1,4 +1,4 @@
-pub(crate) mod types;
+automod::dir!(pub(crate) "src/podman");
 
 use std::{ffi::OsStr, path::PathBuf, pin::Pin, process::Stdio};
 
@@ -100,7 +100,15 @@ impl Podman {
                 command
                     .as_std()
                     .get_args()
-                    .map(OsStr::to_string_lossy)
+                    .map(|arg| {
+                        let arg = arg.to_string_lossy();
+
+                        if arg.contains(char::is_whitespace) {
+                            format!("\"{arg}\"")
+                        } else {
+                            arg.to_string()
+                        }
+                    })
                     .join(" ")
             )
         })?;
@@ -115,7 +123,15 @@ impl Podman {
                     command
                         .as_std()
                         .get_args()
-                        .map(OsStr::to_string_lossy)
+                        .map(|arg| {
+                            let arg = arg.to_string_lossy();
+
+                            if arg.contains(char::is_whitespace) {
+                                format!("\"{arg}\"")
+                            } else {
+                                arg.to_string()
+                            }
+                        })
                         .join(" ")
                 )),
             )
