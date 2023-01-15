@@ -22,19 +22,19 @@ use crate::{
 pub(crate) struct Args {
     /// Remove containers for services not defined in the Compose file
     #[arg(long)]
-    remove_orphans: bool,
+    pub(crate) remove_orphans: bool,
 
     /// Specify a shutdown timeout in seconds
     #[arg(short, long, default_value_t = 10)]
-    timeout: u32,
+    pub(crate) timeout: u32,
 
     /// Remove named volumes declared in the `volumes` section of the Compose file and anonymous volumes attached to containers
     #[arg(short, long)]
-    volumes: bool,
+    pub(crate) volumes: bool,
 
     /// Remove images used by services
     #[arg(long)]
-    rmi: bool,
+    pub(crate) rmi: bool,
 }
 
 async fn remove_networks(podman: &Podman, progress: &Progress, networks: &[String]) -> Result<()> {
@@ -71,9 +71,9 @@ async fn remove_volumes(podman: &Podman, progress: &Progress, volumes: &[String]
         .map(|_| ())
 }
 
-pub(crate) async fn run(args: Args, config: Config) -> Result<()> {
-    let podman = Podman::new(&config).await?;
-    let file = compose::parse(&config, false)?;
+pub(crate) async fn run(args: Args, config: &Config) -> Result<()> {
+    let podman = Podman::new(config).await?;
+    let file = compose::parse(config, false)?;
     let name = file.name.as_ref().unwrap();
 
     let (containers, networks, volumes) = try_join3(
@@ -150,7 +150,7 @@ pub(crate) async fn run(args: Args, config: Config) -> Result<()> {
         .collect::<Vec<_>>();
 
     if !containers.is_empty() {
-        let progress = Progress::new(&config);
+        let progress = Progress::new(config);
 
         stop_containers(
             &podman,
@@ -166,7 +166,7 @@ pub(crate) async fn run(args: Args, config: Config) -> Result<()> {
 
         progress.finish();
 
-        let progress = Progress::new(&config);
+        let progress = Progress::new(config);
 
         remove_containers(
             &podman,
@@ -190,7 +190,7 @@ pub(crate) async fn run(args: Args, config: Config) -> Result<()> {
     }
 
     if !networks.is_empty() || (args.volumes && !volumes.is_empty()) || args.rmi {
-        let progress = Progress::new(&config);
+        let progress = Progress::new(config);
 
         try_join!(
             remove_networks(&podman, &progress, &networks),

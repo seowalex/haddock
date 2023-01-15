@@ -26,8 +26,8 @@ enum Format {
     Json,
 }
 
-pub(crate) async fn run(args: Args, config: Config) -> Result<()> {
-    let podman = Podman::new(&config).await?;
+pub(crate) async fn run(args: Args, config: &Config) -> Result<()> {
+    let podman = Podman::new(config).await?;
 
     if args.quiet {
         print!(

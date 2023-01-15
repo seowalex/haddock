@@ -27,15 +27,15 @@ pub(crate) struct Args {
     archive: bool,
 }
 
-pub(crate) async fn run(args: Args, config: Config) -> Result<()> {
+pub(crate) async fn run(args: Args, config: &Config) -> Result<()> {
     match (&args.source.0, &args.destination.0) {
         (Some(_), Some(_)) => bail!("Copying between services is not supported"),
         (None, None) => bail!("Unknown copy direction"),
         _ => {}
     }
 
-    let podman = Podman::new(&config).await?;
-    let file = compose::parse(&config, false)?;
+    let podman = Podman::new(config).await?;
+    let file = compose::parse(config, false)?;
     let name = file.name.as_ref().unwrap();
 
     let output = podman

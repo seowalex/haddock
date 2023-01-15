@@ -101,9 +101,9 @@ async fn kill_containers(
         .map(|_| ())
 }
 
-pub(crate) async fn run(args: Args, config: Config) -> Result<()> {
-    let podman = Podman::new(&config).await?;
-    let file = compose::parse(&config, false)?;
+pub(crate) async fn run(args: Args, config: &Config) -> Result<()> {
+    let podman = Podman::new(config).await?;
+    let file = compose::parse(config, false)?;
     let name = file.name.as_ref().unwrap();
 
     let output = podman
@@ -138,7 +138,7 @@ pub(crate) async fn run(args: Args, config: Config) -> Result<()> {
         .into_group_map();
 
     if !containers.is_empty() {
-        let progress = Progress::new(&config);
+        let progress = Progress::new(config);
 
         kill_containers(&podman, &progress, &file, &containers, &args.signal).await?;
 

@@ -16,16 +16,13 @@ use tokio::sync::{broadcast, Barrier};
 use tokio_stream::wrappers::BroadcastStream;
 
 use crate::{
-    commands::rm::{self, remove_containers},
+    commands::down,
     compose::{
         self,
         types::{Compose, FileReference, ServiceVolume, ServiceVolumeType},
     },
     config::Config,
-    podman::{
-        types::{Container, Pod},
-        Podman,
-    },
+    podman::{types::Pod, Podman},
     progress::{Finish, Progress},
     utils::Digest,
 };
@@ -272,7 +269,7 @@ async fn create_containers(
         })
         .collect::<DiGraphMap<_, _>>();
 
-    if !(args.force_recreate || args.services.is_empty()) {
+    if !args.services.is_empty() {
         let mut nodes = Vec::new();
 
         for node in dependencies.nodes() {
@@ -445,83 +442,56 @@ async fn create_containers(
         .map(|_| ())
 }
 
-pub(crate) async fn run(args: Args, config: Config) -> Result<()> {
-    let podman = Podman::new(&config).await?;
-    let mut file = compose::parse(&config, false)?;
+pub(crate) async fn run(args: Args, config: &Config) -> Result<()> {
+    let podman = Podman::new(config).await?;
+    let mut file = compose::parse(config, false)?;
     let name = file.name.as_ref().unwrap();
     let labels = [("version", crate_version!()), ("project", name)]
         .into_iter()
         .map(|label| format!("io.podman.compose.{}={}", label.0, label.1))
         .collect::<Vec<_>>();
-    let pod_filter = format!("name=^{name}$");
-    let container_filter = format!("pod={name}");
-    let progress = Progress::new(&config);
 
-    let (pod, containers, ..) = try_join!(
-        podman.force_run(["pod", "ps", "--format", "json", "--filter", &pod_filter]),
-        podman.force_run([
+    let output = podman
+        .force_run([
+            "pod",
             "ps",
-            "--all",
             "--format",
             "json",
             "--filter",
-            &container_filter
-        ]),
-        create_pod(&podman, &config, &file, &labels, name),
+            &format!("name=^{name}$"),
+        ])
+        .await?;
+    let config_hash = serde_json::from_str::<VecDeque<Pod>>(&output)?
+        .pop_front()
+        .and_then(|pod| pod.labels.and_then(|labels| labels.config_hash));
+
+    if args.force_recreate
+        || config_hash
+            .map(|config_hash| config_hash != file.digest())
+            .unwrap_or_default()
+    {
+        down::run(
+            down::Args {
+                remove_orphans: args.remove_orphans,
+                timeout: 10,
+                volumes: true,
+                rmi: false,
+            },
+            config,
+        )
+        .await?;
+    }
+
+    let progress = Progress::new(config);
+
+    try_join!(
+        create_pod(&podman, config, &file, &labels, name),
         create_networks(&podman, &progress, &file, &labels),
         create_volumes(&podman, &progress, &file, &labels),
         create_secrets(&podman, &progress, &file, &labels),
     )?;
 
     progress.finish();
-
-    let config_hash = serde_json::from_str::<VecDeque<Pod>>(&pod)?
-        .pop_front()
-        .and_then(|pod| pod.labels.and_then(|labels| labels.config_hash));
-    let containers = serde_json::from_str::<Vec<Container>>(&containers)?
-        .into_iter()
-        .filter_map(|mut container| {
-            container
-                .labels
-                .and_then(|labels| labels.service)
-                .and_then(|service| {
-                    if args.force_recreate
-                        || args.services.contains(&service)
-                        || (args.services.is_empty() && file.services.keys().contains(&service))
-                    {
-                        container.names.pop_front().map(|name| (service, name))
-                    } else {
-                        None
-                    }
-                })
-        })
-        .into_group_map();
-
-    if (args.force_recreate
-        || config_hash
-            .clone()
-            .map(|config_hash| config_hash != file.digest())
-            .unwrap_or_default())
-        && !containers.is_empty()
-    {
-        let progress = Progress::new(&config);
-
-        remove_containers(
-            &podman,
-            &progress,
-            &file,
-            &containers,
-            rm::Args {
-                services: Vec::new(),
-                force: true,
-                stop: true,
-                volumes: true,
-            },
-        )
-        .await?;
-
-        progress.finish();
-    }
 
     for service in file.services.values_mut() {
         service.networks = mem::take(&mut service.networks)
@@ -549,7 +519,7 @@ pub(crate) async fn run(args: Args, config: Config) -> Result<()> {
             .collect();
     }
 
-    let progress = Progress::new(&config);
+    let progress = Progress::new(config);
 
     create_containers(&podman, &progress, &file, &labels, name, args).await?;
 

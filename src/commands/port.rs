@@ -36,9 +36,9 @@ impl Display for Protocol {
     }
 }
 
-pub(crate) async fn run(args: Args, config: Config) -> Result<()> {
-    let podman = Podman::new(&config).await?;
-    let file = compose::parse(&config, false)?;
+pub(crate) async fn run(args: Args, config: &Config) -> Result<()> {
+    let podman = Podman::new(config).await?;
+    let file = compose::parse(config, false)?;
     let name = file.name.as_ref().unwrap();
 
     let output = podman

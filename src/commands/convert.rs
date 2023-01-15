@@ -53,8 +53,8 @@ enum Format {
     Json,
 }
 
-pub(crate) fn run(args: Args, config: Config) -> Result<()> {
-    let file = compose::parse(&config, args.no_interpolate)?;
+pub(crate) fn run(args: Args, config: &Config) -> Result<()> {
+    let file = compose::parse(config, args.no_interpolate)?;
 
     if !args.quiet {
         if args.services {
