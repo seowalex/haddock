@@ -466,9 +466,10 @@ pub(crate) async fn run(args: Args, config: &Config) -> Result<()> {
         .and_then(|pod| pod.labels.and_then(|labels| labels.config_hash));
 
     if args.force_recreate
-        || config_hash
-            .map(|config_hash| config_hash != file.digest())
-            .unwrap_or_default()
+        || (!args.no_recreate
+            && config_hash
+                .map(|config_hash| config_hash != file.digest())
+                .unwrap_or_default())
     {
         down::run(
             down::Args {
