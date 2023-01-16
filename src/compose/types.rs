@@ -14,12 +14,10 @@ use indexmap::{indexmap, IndexMap, IndexSet};
 use path_absolutize::Absolutize;
 use serde::{Deserialize, Serialize};
 use serde_with::{
-    formats::{PreferMany, SpaceSeparator},
-    serde_as, serde_conv, skip_serializing_none, DefaultOnNull, DisplayFromStr,
-    DurationMicroSeconds, OneOrMany, PickFirst, StringWithSeparator,
+    formats::PreferMany, serde_as, serde_conv, skip_serializing_none, DefaultOnNull,
+    DisplayFromStr, DurationMicroSeconds, OneOrMany, PickFirst,
 };
 use serde_yaml::Value;
-use sha2::{Digest, Sha256};
 
 use crate::utils::{DisplayFromAny, DuplicateInsertsLastWinsSet, STYLED_WARNING};
 
@@ -45,13 +43,6 @@ pub(crate) struct Compose {
 impl Compose {
     pub(crate) fn new() -> Self {
         Self::default()
-    }
-
-    pub(crate) fn digest(&self) -> String {
-        format!(
-            "{:x}",
-            Sha256::digest(serde_yaml::to_string(self).unwrap().as_bytes())
-        )
     }
 
     pub(crate) fn merge(&mut self, other: Self) {
@@ -91,7 +82,7 @@ pub(crate) struct Service {
     pub(crate) cap_add: Vec<String>,
     pub(crate) cap_drop: Vec<String>,
     pub(crate) cgroup_parent: Option<String>,
-    #[serde_as(as = "PickFirst<(_, StringWithSeparator::<SpaceSeparator, String>)>")]
+    #[serde_as(as = "PickFirst<(_, CommandOrString)>")]
     pub(crate) command: Vec<String>,
     pub(crate) container_name: Option<String>,
     #[serde_as(as = "Option<PickFirst<(DurationMicroSeconds, DurationWithSuffix)>>")]
@@ -116,7 +107,7 @@ pub(crate) struct Service {
     pub(crate) dns_opt: Vec<String>,
     #[serde_as(as = "OneOrMany<_, PreferMany>")]
     pub(crate) dns_search: Vec<String>,
-    #[serde_as(as = "PickFirst<(_, StringWithSeparator::<SpaceSeparator, String>)>")]
+    #[serde_as(as = "PickFirst<(_, CommandOrString)>")]
     pub(crate) entrypoint: Vec<String>,
     #[serde_as(as = "OneOrMany<AbsPathBuf, PreferMany>")]
     pub(crate) env_file: Vec<PathBuf>,
@@ -403,7 +394,8 @@ impl Service {
         }
 
         if !self.entrypoint.is_empty() {
-            args.extend([String::from("--entrypoint"), self.entrypoint.join(" ")]);
+            args.push(String::from("--entrypoint"));
+            args.extend(self.entrypoint.clone());
         }
 
         for env_file in &self.env_file {
@@ -438,7 +430,8 @@ impl Service {
 
         if let Some(healthcheck) = &self.healthcheck {
             if !healthcheck.test.is_empty() {
-                args.extend([String::from("--health-cmd"), healthcheck.test.join(" ")]);
+                args.push(String::from("--health-cmd"));
+                args.extend(healthcheck.test.clone());
             }
 
             if let Some(interval) = healthcheck.interval {
@@ -644,7 +637,7 @@ impl Service {
         }
 
         if !self.command.is_empty() {
-            args.push(self.command.join(" "));
+            args.extend(self.command.clone());
         }
 
         (global_args, args)
@@ -831,7 +824,7 @@ impl Display for Device {
 )]
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct Healthcheck {
-    #[serde_as(as = "PickFirst<(_, StringWithSeparator::<SpaceSeparator, String>)>")]
+    #[serde_as(as = "PickFirst<(_, CommandOrString)>")]
     pub(crate) test: Vec<String>,
     #[serde_as(as = "Option<DurationWithSuffix>")]
     pub(crate) interval: Option<Duration>,
@@ -1339,6 +1332,13 @@ serde_conv!(
                 ..BuildConfig::default()
             })
     }
+);
+
+serde_conv!(
+    CommandOrString,
+    Vec<String>,
+    shell_words::join,
+    |args: String| { shell_words::split(&args).map_err(Error::from) }
 );
 
 serde_conv!(

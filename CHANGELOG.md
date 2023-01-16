@@ -21,11 +21,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `unpause` command.
 - `cp` command.
 - `events` command.
+- `logs` command.
 - `top` command.
 - `ps` command.
 - `images` command.
-- `ls` command.
 - `port` command.
+- `ls` command.
 - `convert` command.
 - `version` command.
 - `help` command.

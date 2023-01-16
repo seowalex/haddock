@@ -7,7 +7,6 @@ use futures::{
     stream::{self, select},
     Stream, StreamExt, TryStreamExt,
 };
-use itertools::Itertools;
 use once_cell::sync::Lazy;
 use tokio::{
     io::{AsyncBufReadExt, BufReader},
@@ -67,17 +66,10 @@ impl Podman {
         if self.dry_run {
             println!(
                 "`podman {}`",
-                args.into_iter()
-                    .map(|arg| {
-                        let arg = arg.as_ref().to_string_lossy();
-
-                        if arg.contains(char::is_whitespace) {
-                            format!("\"{arg}\"")
-                        } else {
-                            arg.to_string()
-                        }
-                    })
-                    .join(" "),
+                shell_words::join(
+                    args.into_iter()
+                        .map(|arg| arg.as_ref().to_string_lossy().to_string())
+                )
             );
 
             Ok(String::new())
@@ -97,19 +89,12 @@ impl Podman {
             anyhow!(
                 "`{} {}` cannot be executed",
                 command.as_std().get_program().to_string_lossy(),
-                command
-                    .as_std()
-                    .get_args()
-                    .map(|arg| {
-                        let arg = arg.to_string_lossy();
-
-                        if arg.contains(char::is_whitespace) {
-                            format!("\"{arg}\"")
-                        } else {
-                            arg.to_string()
-                        }
-                    })
-                    .join(" ")
+                shell_words::join(
+                    command
+                        .as_std()
+                        .get_args()
+                        .map(|arg| arg.to_string_lossy().to_string())
+                )
             )
         })?;
 
@@ -120,19 +105,12 @@ impl Podman {
                 anyhow!("{}", String::from_utf8_lossy(&output.stderr)).context(anyhow!(
                     "`{} {}` returned an error",
                     command.as_std().get_program().to_string_lossy(),
-                    command
-                        .as_std()
-                        .get_args()
-                        .map(|arg| {
-                            let arg = arg.to_string_lossy();
-
-                            if arg.contains(char::is_whitespace) {
-                                format!("\"{arg}\"")
-                            } else {
-                                arg.to_string()
-                            }
-                        })
-                        .join(" ")
+                    shell_words::join(
+                        command
+                            .as_std()
+                            .get_args()
+                            .map(|arg| arg.to_string_lossy().to_string())
+                    )
                 )),
             )
         }
@@ -146,17 +124,10 @@ impl Podman {
         if self.dry_run {
             println!(
                 "`podman {}`",
-                args.into_iter()
-                    .map(|arg| {
-                        let arg = arg.as_ref().to_string_lossy();
-
-                        if arg.contains(char::is_whitespace) {
-                            format!("\"{arg}\"")
-                        } else {
-                            arg.to_string()
-                        }
-                    })
-                    .join(" "),
+                shell_words::join(
+                    args.into_iter()
+                        .map(|arg| arg.as_ref().to_string_lossy().to_string())
+                )
             );
 
             Ok(stream::empty().boxed())

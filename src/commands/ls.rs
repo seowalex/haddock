@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::ValueEnum;
 
-use crate::{config::Config, podman::Podman};
+use crate::podman::Podman;
 
 /// List running compose projects
 #[derive(clap::Args, Debug)]
@@ -26,9 +26,7 @@ enum Format {
     Json,
 }
 
-pub(crate) async fn run(args: Args, config: &Config) -> Result<()> {
-    let podman = Podman::new(config).await?;
-
+pub(crate) async fn run(args: Args, podman: &Podman) -> Result<()> {
     if args.quiet {
         print!(
             "{}",

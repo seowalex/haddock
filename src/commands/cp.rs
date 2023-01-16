@@ -2,8 +2,7 @@ use anyhow::{anyhow, bail, Result};
 use itertools::Itertools;
 
 use crate::{
-    compose,
-    config::Config,
+    compose::types::Compose,
     podman::{types::Container, Podman},
     utils::parse_colon_delimited,
 };
@@ -27,15 +26,13 @@ pub(crate) struct Args {
     archive: bool,
 }
 
-pub(crate) async fn run(args: Args, config: &Config) -> Result<()> {
+pub(crate) async fn run(args: Args, podman: &Podman, file: &Compose) -> Result<()> {
     match (&args.source.0, &args.destination.0) {
         (Some(_), Some(_)) => bail!("Copying between services is not supported"),
         (None, None) => bail!("Unknown copy direction"),
         _ => {}
     }
 
-    let podman = Podman::new(config).await?;
-    let file = compose::parse(config, false)?;
     let name = file.name.as_ref().unwrap();
 
     let output = podman

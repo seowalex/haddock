@@ -5,8 +5,7 @@ use clap::ValueEnum;
 use itertools::Itertools;
 
 use crate::{
-    compose,
-    config::Config,
+    compose::types::Compose,
     podman::{types::Container, Podman},
 };
 
@@ -62,9 +61,7 @@ impl Display for Status {
     }
 }
 
-pub(crate) async fn run(args: Args, config: &Config) -> Result<()> {
-    let podman = Podman::new(config).await?;
-    let file = compose::parse(config, false)?;
+pub(crate) async fn run(args: Args, podman: &Podman, file: &Compose) -> Result<()> {
     let name = file.name.as_ref().unwrap();
 
     let filters = args

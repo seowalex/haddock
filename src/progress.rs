@@ -120,6 +120,15 @@ pub(crate) struct Spinner {
     header: ProgressBar,
 }
 
+impl Spinner {
+    pub(crate) fn finish_with_message(&self, message: impl Into<Cow<'static, str>>) {
+        self.inner.set_style(SPINNER_FINISHED_STYLE.clone());
+        self.inner.finish_with_message(message);
+
+        self.header.inc(1);
+    }
+}
+
 pub(crate) trait Finish {
     fn finish_with_message(self, spinner: Spinner, message: impl Into<Cow<'static, str>>) -> Self;
 }
@@ -134,14 +143,5 @@ impl<T> Finish for Result<T> {
         }
 
         self
-    }
-}
-
-impl Spinner {
-    pub(crate) fn finish_with_message(&self, message: impl Into<Cow<'static, str>>) {
-        self.inner.set_style(SPINNER_FINISHED_STYLE.clone());
-        self.inner.finish_with_message(message);
-
-        self.header.inc(1);
     }
 }

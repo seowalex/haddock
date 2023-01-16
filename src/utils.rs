@@ -46,9 +46,13 @@ macro_rules! regex {
 
 pub(crate) use regex;
 
-pub(crate) trait Digest
+pub(crate) trait Digest {
+    fn digest(&self) -> String;
+}
+
+impl<T> Digest for T
 where
-    Self: Serialize,
+    T: Serialize,
 {
     fn digest(&self) -> String {
         format!(
@@ -57,8 +61,6 @@ where
         )
     }
 }
-
-impl<T> Digest for T where T: Serialize {}
 
 pub(crate) struct DisplayFromAny;
 

@@ -7,7 +7,7 @@ use crate::{
         rm::{self, remove_containers},
         stop::{self, stop_containers},
     },
-    compose,
+    compose::types::Compose,
     config::Config,
     podman::{
         types::{Container, Network, Volume},
@@ -71,9 +71,12 @@ async fn remove_volumes(podman: &Podman, progress: &Progress, volumes: &[String]
         .map(|_| ())
 }
 
-pub(crate) async fn run(args: Args, config: &Config) -> Result<()> {
-    let podman = Podman::new(config).await?;
-    let file = compose::parse(config, false)?;
+pub(crate) async fn run(
+    args: Args,
+    podman: &Podman,
+    file: &Compose,
+    config: &Config,
+) -> Result<()> {
     let name = file.name.as_ref().unwrap();
 
     let (containers, networks, volumes) = try_join3(
@@ -153,9 +156,9 @@ pub(crate) async fn run(args: Args, config: &Config) -> Result<()> {
         let progress = Progress::new(config);
 
         stop_containers(
-            &podman,
+            podman,
             &progress,
-            &file,
+            file,
             &containers,
             stop::Args {
                 services: Vec::new(),
@@ -169,9 +172,9 @@ pub(crate) async fn run(args: Args, config: &Config) -> Result<()> {
         let progress = Progress::new(config);
 
         remove_containers(
-            &podman,
+            podman,
             &progress,
-            &file,
+            file,
             &containers,
             rm::Args {
                 services: Vec::new(),
@@ -193,10 +196,10 @@ pub(crate) async fn run(args: Args, config: &Config) -> Result<()> {
         let progress = Progress::new(config);
 
         try_join!(
-            remove_networks(&podman, &progress, &networks),
+            remove_networks(podman, &progress, &networks),
             async {
                 if args.volumes {
-                    remove_volumes(&podman, &progress, &volumes).await?;
+                    remove_volumes(podman, &progress, &volumes).await?;
                 }
 
                 Ok(())

@@ -8,7 +8,7 @@ use petgraph::{graphmap::DiGraphMap, Direction};
 use tokio::sync::{broadcast, Barrier};
 
 use crate::{
-    compose::{self, types::Compose},
+    compose::types::Compose,
     config::Config,
     podman::{types::Container, Podman},
     progress::{Finish, Progress},
@@ -93,9 +93,12 @@ async fn start_containers(
         .map(|_| ())
 }
 
-pub(crate) async fn run(args: Args, config: &Config) -> Result<()> {
-    let podman = Podman::new(config).await?;
-    let file = compose::parse(config, false)?;
+pub(crate) async fn run(
+    args: Args,
+    podman: &Podman,
+    file: &Compose,
+    config: &Config,
+) -> Result<()> {
     let name = file.name.as_ref().unwrap();
 
     let output = podman
@@ -129,7 +132,7 @@ pub(crate) async fn run(args: Args, config: &Config) -> Result<()> {
     if !containers.is_empty() {
         let progress = Progress::new(config);
 
-        start_containers(&podman, &progress, &file, &containers).await?;
+        start_containers(podman, &progress, file, &containers).await?;
 
         progress.finish();
     }
