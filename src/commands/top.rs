@@ -47,22 +47,24 @@ pub(crate) async fn run(args: Args, podman: &Podman, file: &Compose) -> Result<(
         })
         .collect::<Vec<_>>();
 
-    print!(
-        "{}",
-        containers
-            .iter()
-            .map(|container| {
-                podman
-                    .run(["top", container])
-                    .map_ok(move |output| (container, output))
-            })
-            .collect::<FuturesUnordered<_>>()
-            .try_collect::<Vec<_>>()
-            .await?
-            .into_iter()
-            .map(|(container, output)| format!("{container}\n{output}"))
-            .join("\n")
-    );
+    if !containers.is_empty() {
+        print!(
+            "{}",
+            containers
+                .iter()
+                .map(|container| {
+                    podman
+                        .run(["top", container])
+                        .map_ok(move |output| (container, output))
+                })
+                .collect::<FuturesUnordered<_>>()
+                .try_collect::<Vec<_>>()
+                .await?
+                .into_iter()
+                .map(|(container, output)| format!("{container}\n{output}"))
+                .join("\n")
+        );
+    }
 
     Ok(())
 }

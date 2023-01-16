@@ -50,19 +50,21 @@ pub(crate) async fn run(args: Args, podman: &Podman, file: &Compose) -> Result<(
         })
         .collect::<IndexSet<_>>();
 
-    let mut output = podman.watch(
-        ["events"]
-            .into_iter()
-            .chain(if args.json {
-                vec!["--format", "json"]
-            } else {
-                vec![]
-            })
-            .chain(services.iter().flat_map(|service| ["--filter", service])),
-    )?;
+    if !services.is_empty() {
+        let mut output = podman.watch(
+            ["events"]
+                .into_iter()
+                .chain(if args.json {
+                    vec!["--format", "json"]
+                } else {
+                    vec![]
+                })
+                .chain(services.iter().flat_map(|service| ["--filter", service])),
+        )?;
 
-    while let Some(line) = output.try_next().await? {
-        println!("{line}");
+        while let Some(line) = output.try_next().await? {
+            println!("{line}");
+        }
     }
 
     Ok(())

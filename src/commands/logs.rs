@@ -74,78 +74,81 @@ pub(crate) async fn run(args: Args, podman: &Podman, file: &Compose) -> Result<(
                 })
         })
         .collect::<Vec<_>>();
-    let width = containers.iter().map(String::len).max().unwrap_or_default();
-    let colours = ["cyan", "yellow", "green", "magenta", "blue"];
 
-    let mut output = select_all(
-        containers
-            .into_iter()
-            .enumerate()
-            .map(|(i, container)| {
-                podman
-                    .watch(
-                        ["logs"]
-                            .into_iter()
-                            .chain(if args.follow {
-                                vec!["--follow"]
-                            } else {
-                                vec![]
-                            })
-                            .chain(if let Some(since) = args.since.as_ref() {
-                                vec!["--since", since]
-                            } else {
-                                vec![]
-                            })
-                            .chain(if let Some(until) = args.until.as_ref() {
-                                vec!["--until", until]
-                            } else {
-                                vec![]
-                            })
-                            .chain(if args.timestamps {
-                                vec!["--timestamps"]
-                            } else {
-                                vec![]
-                            })
-                            .chain(if let Some(tail) = tail.as_ref() {
-                                vec!["--tail", tail]
-                            } else {
-                                vec![]
-                            })
-                            .chain([container.as_str()]),
-                    )
-                    .map(|stream| {
-                        let i = i % (colours.len() * 2);
+    if !containers.is_empty() {
+        let width = containers.iter().map(String::len).max().unwrap_or_default();
+        let colours = ["cyan", "yellow", "green", "magenta", "blue"];
 
-                        let style = if args.no_color {
-                            Style::new()
-                        } else {
-                            if i < colours.len() {
-                                Style::from_dotted_str(colours[i])
-                            } else {
-                                Style::from_dotted_str(&format!(
-                                    "{}.bright",
-                                    colours[i - colours.len()]
-                                ))
-                            }
-                        };
+        let mut output = select_all(
+            containers
+                .into_iter()
+                .enumerate()
+                .map(|(i, container)| {
+                    podman
+                        .watch(
+                            ["logs"]
+                                .into_iter()
+                                .chain(if args.follow {
+                                    vec!["--follow"]
+                                } else {
+                                    vec![]
+                                })
+                                .chain(if let Some(since) = args.since.as_ref() {
+                                    vec!["--since", since]
+                                } else {
+                                    vec![]
+                                })
+                                .chain(if let Some(until) = args.until.as_ref() {
+                                    vec!["--until", until]
+                                } else {
+                                    vec![]
+                                })
+                                .chain(if args.timestamps {
+                                    vec!["--timestamps"]
+                                } else {
+                                    vec![]
+                                })
+                                .chain(if let Some(tail) = tail.as_ref() {
+                                    vec!["--tail", tail]
+                                } else {
+                                    vec![]
+                                })
+                                .chain([container.as_ref()]),
+                        )
+                        .map(|stream| {
+                            let i = i % (colours.len() * 2);
 
-                        stream.map_ok(move |line| {
-                            if args.no_log_prefix {
-                                line
+                            let style = if args.no_color {
+                                Style::new()
                             } else {
-                                format!(
-                                    "{} {line}",
-                                    style.apply_to(format!("{container:width$}  |"))
-                                )
-                            }
+                                if i < colours.len() {
+                                    Style::from_dotted_str(colours[i])
+                                } else {
+                                    Style::from_dotted_str(&format!(
+                                        "{}.bright",
+                                        colours[i - colours.len()]
+                                    ))
+                                }
+                            };
+
+                            stream.map_ok(move |line| {
+                                if args.no_log_prefix {
+                                    line
+                                } else {
+                                    format!(
+                                        "{} {line}",
+                                        style.apply_to(format!("{container:width$}  |"))
+                                    )
+                                }
+                            })
                         })
-                    })
-            })
-            .collect::<Result<Vec<_>>>()?,
-    );
+                })
+                .collect::<Result<Vec<_>>>()?,
+        );
 
-    while let Some(line) = output.try_next().await? {
-        println!("{line}");
+        while let Some(line) = output.try_next().await? {
+            println!("{line}");
+        }
     }
 
     Ok(())

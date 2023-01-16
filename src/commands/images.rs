@@ -64,15 +64,11 @@ pub(crate) async fn run(args: Args, podman: &Podman, file: &Compose) -> Result<(
         for image in images {
             println!("{image}");
         }
-    } else {
-        let filters = if images.is_empty() {
-            vec![String::from("id=")]
-        } else {
-            images
-                .into_iter()
-                .map(|image| format!("id={image}"))
-                .collect::<Vec<_>>()
-        };
+    } else if !images.is_empty() {
+        let filters = images
+            .into_iter()
+            .map(|image| format!("id={image}"))
+            .collect::<Vec<_>>();
 
         print!(
             "{}",

@@ -1,6 +1,11 @@
 automod::dir!(pub(crate) "src/podman");
 
-use std::{ffi::OsStr, path::PathBuf, pin::Pin, process::Stdio};
+use std::{
+    ffi::OsStr,
+    path::PathBuf,
+    pin::Pin,
+    process::{self, Stdio},
+};
 
 use anyhow::{anyhow, bail, Context, Error, Result};
 use futures::{
@@ -144,6 +149,32 @@ impl Podman {
             Ok(select(LinesStream::new(stdout), LinesStream::new(stderr))
                 .map_err(Error::from)
                 .boxed())
+        }
+    }
+
+    pub(crate) async fn attach<I, S>(&self, args: I) -> Result<()>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>,
+    {
+        if self.dry_run {
+            println!(
+                "`podman {}`",
+                shell_words::join(
+                    args.into_iter()
+                        .map(|arg| arg.as_ref().to_string_lossy().to_string())
+                )
+            );
+
+            Ok(())
+        } else {
+            let status = self.command(args).spawn()?.wait().await?;
+
+            if !status.success() {
+                process::exit(status.code().unwrap_or(1))
+            }
+
+            Ok(())
         }
     }
 }

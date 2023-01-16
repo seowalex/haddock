@@ -105,22 +105,13 @@ pub(crate) async fn run(args: Args, podman: &Podman, file: &Compose) -> Result<(
         for service in containers.into_keys() {
             println!("{service}");
         }
-    } else {
-        let filters = if containers.is_empty() {
-            vec![String::from("name=")]
-                .into_iter()
-                .chain(filters)
-                .collect::<Vec<_>>()
-        } else {
-            containers
-                .into_values()
-                .flatten()
-                .filter_map(|container| {
-                    container.names.front().map(|name| format!("name=^{name}$"))
-                })
-                .chain(filters)
-                .collect::<Vec<_>>()
-        };
+    } else if !containers.is_empty() {
+        let filters = containers
+            .into_values()
+            .flatten()
+            .filter_map(|container| container.names.front().map(|name| format!("name=^{name}$")))
+            .chain(filters)
+            .collect::<Vec<_>>();
 
         print!(
             "{}",

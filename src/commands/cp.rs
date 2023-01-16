@@ -113,7 +113,7 @@ pub(crate) async fn run(args: Args, podman: &Podman, file: &Compose) -> Result<(
                             .unwrap_or_default(),
                         args.source.1
                     )
-                    .as_str(),
+                    .as_ref(),
                     format!(
                         "{}{}",
                         destination?
@@ -121,7 +121,7 @@ pub(crate) async fn run(args: Args, podman: &Podman, file: &Compose) -> Result<(
                             .unwrap_or_default(),
                         args.destination.1
                     )
-                    .as_str(),
+                    .as_ref(),
                 ]),
         )
         .await?;
