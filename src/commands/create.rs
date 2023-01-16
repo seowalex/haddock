@@ -8,7 +8,7 @@ use anyhow::{bail, Result};
 use clap::{crate_version, ValueEnum};
 use futures::{stream::FuturesUnordered, try_join, StreamExt, TryStreamExt};
 use heck::AsKebabCase;
-use indexmap::IndexMap;
+use indexmap::{IndexMap, IndexSet};
 use itertools::Itertools;
 use petgraph::{algo::has_path_connecting, graphmap::DiGraphMap, Direction};
 use tokio::sync::{broadcast, Barrier};
@@ -564,11 +564,18 @@ pub(crate) async fn run(
 
     progress.finish();
 
-    let progress = Progress::new(config);
+    if !args
+        .services
+        .iter()
+        .collect::<IndexSet<_>>()
+        .is_disjoint(&file.services.keys().collect::<IndexSet<_>>())
+    {
+        let progress = Progress::new(config);
 
-    create_containers(&podman, &progress, &file, &labels, name, args).await?;
+        create_containers(&podman, &progress, &file, &labels, name, args).await?;
 
-    progress.finish();
+        progress.finish();
+    }
 
     Ok(())
 }

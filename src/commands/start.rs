@@ -1,16 +1,13 @@
-use std::collections::HashMap;
-
 use anyhow::Result;
 use futures::{stream::FuturesUnordered, TryStreamExt};
-use indexmap::IndexMap;
-use itertools::Itertools;
-use petgraph::{graphmap::DiGraphMap, Direction};
+use indexmap::{IndexMap, IndexSet};
+use petgraph::{algo::has_path_connecting, graphmap::DiGraphMap, Direction};
 use tokio::sync::{broadcast, Barrier};
 
 use crate::{
     compose::types::Compose,
     config::Config,
-    podman::{types::Container, Podman},
+    podman::Podman,
     progress::{Finish, Progress},
 };
 
@@ -25,21 +22,39 @@ async fn start_containers(
     podman: &Podman,
     progress: &Progress,
     file: &Compose,
-    containers: &HashMap<String, Vec<String>>,
+    name: &str,
+    args: Args,
 ) -> Result<()> {
-    let dependencies = &file
+    let mut dependencies = file
         .services
         .iter()
-        .filter(|(service, _)| containers.keys().contains(service))
         .flat_map(|(to, service)| {
             service
                 .depends_on
                 .keys()
                 .chain(service.links.keys())
-                .filter(|service| containers.keys().contains(service))
                 .map(move |from| (from, to, ()))
         })
         .collect::<DiGraphMap<_, _>>();
+
+    for service in file.services.keys() {
+        dependencies.add_node(service);
+    }
+
+    if !args.services.is_empty() {
+        for node in dependencies
+            .nodes()
+            .filter(|node| {
+                args.services
+                    .iter()
+                    .all(|service| !has_path_connecting(&dependencies, node, service, None))
+            })
+            .collect::<Vec<_>>()
+        {
+            dependencies.remove_node(node);
+        }
+    }
+
     let capacity = dependencies
         .nodes()
         .map(|service| {
@@ -50,42 +65,77 @@ async fn start_containers(
         .max()
         .unwrap_or_default()
         .max(1);
-    let txs = &containers
-        .keys()
+    let txs = &dependencies
+        .nodes()
         .map(|service| (service, broadcast::channel(capacity).0))
         .collect::<IndexMap<_, _>>();
-    let barrier = &Barrier::new(containers.values().map(Vec::len).sum());
+    let barrier = &Barrier::new(
+        file.services
+            .iter()
+            .filter_map(|(service_name, service)| {
+                if dependencies.contains_node(service_name) {
+                    Some(
+                        service
+                            .deploy
+                            .as_ref()
+                            .and_then(|deploy| deploy.replicas)
+                            .or(service.scale)
+                            .unwrap_or(1) as usize,
+                    )
+                } else {
+                    None
+                }
+            })
+            .sum(),
+    );
+    let dependencies = &dependencies;
 
-    containers
+    file.services
         .iter()
-        .map(|(service, containers)| async move {
-            containers
-                .iter()
-                .map(|container| async move {
-                    let spinner =
-                        progress.add_spinner(format!("Container {container}"), "Starting");
-                    let mut rx = txs[service].subscribe();
+        .filter_map(|(service_name, service)| {
+            if dependencies.contains_node(service_name) {
+                Some(async move {
+                    (1..=service
+                        .deploy
+                        .as_ref()
+                        .and_then(|deploy| deploy.replicas)
+                        .or(service.scale)
+                        .unwrap_or(1))
+                        .map(|i| async move {
+                            let container_name = service
+                                .container_name
+                                .clone()
+                                .unwrap_or_else(|| format!("{name}_{service_name}_{i}"));
+                            let spinner = progress
+                                .add_spinner(format!("Container {container_name}"), "Starting");
+                            let mut rx = txs[service_name].subscribe();
 
-                    barrier.wait().await;
+                            barrier.wait().await;
 
-                    for _ in dependencies.neighbors_directed(service, Direction::Incoming) {
-                        rx.recv().await?;
+                            for _ in
+                                dependencies.neighbors_directed(service_name, Direction::Incoming)
+                            {
+                                rx.recv().await?;
+                            }
+
+                            podman
+                                .run(["start", &container_name])
+                                .await
+                                .finish_with_message(spinner, "Started")
+                        })
+                        .collect::<FuturesUnordered<_>>()
+                        .try_collect::<Vec<_>>()
+                        .await?;
+
+                    for dependent in dependencies.neighbors(service_name) {
+                        txs[dependent].send(())?;
                     }
 
-                    podman
-                        .run(["start", container])
-                        .await
-                        .finish_with_message(spinner, "Started")
+                    Ok(())
                 })
-                .collect::<FuturesUnordered<_>>()
-                .try_collect::<Vec<_>>()
-                .await?;
-
-            for dependent in dependencies.neighbors(service) {
-                txs[dependent].send(())?;
+            } else {
+                None
             }
-
-            Ok(())
         })
         .collect::<FuturesUnordered<_>>()
         .try_collect::<Vec<_>>()
@@ -101,38 +151,15 @@ pub(crate) async fn run(
 ) -> Result<()> {
     let name = file.name.as_ref().unwrap();
 
-    let output = podman
-        .force_run([
-            "ps",
-            "--all",
-            "--format",
-            "json",
-            "--filter",
-            &format!("pod={name}"),
-        ])
-        .await?;
-    let containers = serde_json::from_str::<Vec<Container>>(&output)?
-        .into_iter()
-        .filter_map(|mut container| {
-            container
-                .labels
-                .and_then(|labels| labels.service)
-                .and_then(|service| {
-                    if args.services.contains(&service)
-                        || (args.services.is_empty() && file.services.keys().contains(&service))
-                    {
-                        container.names.pop_front().map(|name| (service, name))
-                    } else {
-                        None
-                    }
-                })
-        })
-        .into_group_map();
-
-    if !containers.is_empty() {
+    if !args
+        .services
+        .iter()
+        .collect::<IndexSet<_>>()
+        .is_disjoint(&file.services.keys().collect::<IndexSet<_>>())
+    {
         let progress = Progress::new(config);
 
-        start_containers(podman, &progress, file, &containers).await?;
+        start_containers(podman, &progress, file, name, args).await?;
 
         progress.finish();
     }
