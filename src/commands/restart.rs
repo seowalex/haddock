@@ -30,7 +30,7 @@ async fn restart_containers(
     progress: &Progress,
     file: &Compose,
     containers: &HashMap<String, Vec<String>>,
-    timeout: u32,
+    args: Args,
 ) -> Result<()> {
     let dependencies = &file
         .services
@@ -78,7 +78,7 @@ async fn restart_containers(
                     }
 
                     podman
-                        .run(["restart", "--time", &timeout.to_string(), container])
+                        .run(["restart", "--time", &args.timeout.to_string(), container])
                         .await
                         .finish_with_message(spinner, "Restarted")
                 })
@@ -137,7 +137,7 @@ pub(crate) async fn run(
     if !containers.is_empty() {
         let progress = Progress::new(config);
 
-        restart_containers(podman, &progress, file, &containers, args.timeout).await?;
+        restart_containers(podman, &progress, file, &containers, args).await?;
 
         progress.finish();
     }

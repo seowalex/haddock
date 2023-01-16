@@ -2,7 +2,6 @@ use std::{
     collections::VecDeque,
     env,
     fmt::{self, Display, Formatter},
-    mem,
 };
 
 use anyhow::{bail, Result};
@@ -269,20 +268,20 @@ async fn create_containers(
         })
         .collect::<DiGraphMap<_, _>>();
 
+    for service in file.services.keys() {
+        dependencies.add_node(service);
+    }
+
     if !args.services.is_empty() {
-        let mut nodes = Vec::new();
-
-        for node in dependencies.nodes() {
-            if !args
-                .services
-                .iter()
-                .any(|service| has_path_connecting(&dependencies, node, service, None))
-            {
-                nodes.push(node);
-            }
-        }
-
-        for node in nodes {
+        for node in dependencies
+            .nodes()
+            .filter(|node| {
+                args.services
+                    .iter()
+                    .all(|service| !has_path_connecting(&dependencies, node, service, None))
+            })
+            .collect::<Vec<_>>()
+        {
             dependencies.remove_node(node);
         }
     }
@@ -297,16 +296,9 @@ async fn create_containers(
         .max()
         .unwrap_or_default()
         .max(1);
-    let txs = &file
-        .services
-        .keys()
-        .filter_map(|service| {
-            if dependencies.contains_node(service) {
-                Some((service, broadcast::channel::<Vec<String>>(capacity).0))
-            } else {
-                None
-            }
-        })
+    let txs = &dependencies
+        .nodes()
+        .map(|service| (service, broadcast::channel::<Vec<String>>(capacity).0))
         .collect::<IndexMap<_, _>>();
     let barrier = &Barrier::new(
         file.services
@@ -385,6 +377,68 @@ async fn create_containers(
                                         })
                                     });
 
+                                let networks = service
+                                    .networks
+                                    .iter()
+                                    .map(|(name, network)| {
+                                        let name = file.networks[name].name.clone().unwrap();
+                                        let mut network = network
+                                            .as_ref()
+                                            .map(ToString::to_string)
+                                            .unwrap_or_default();
+
+                                        if let Some(mac_address) = service.mac_address.as_ref() {
+                                            if network.is_empty() {
+                                                network = format!(":mac={mac_address}");
+                                            } else {
+                                                network = format!("{network},mac={mac_address}");
+                                            }
+                                        }
+
+                                        format!("{name}{network}")
+                                    })
+                                    .collect::<Vec<_>>();
+                                let volumes = service
+                                    .volumes
+                                    .iter()
+                                    .flat_map(|volume| {
+                                        let volume = match &volume.r#type {
+                                            ServiceVolumeType::Volume(Some(source)) => {
+                                                ServiceVolume {
+                                                    r#type: ServiceVolumeType::Volume(
+                                                        file.volumes[source].name.clone(),
+                                                    ),
+                                                    ..volume.clone()
+                                                }
+                                            }
+                                            _ => volume.clone(),
+                                        };
+
+                                        [
+                                            String::from(match volume.r#type {
+                                                ServiceVolumeType::Volume(_)
+                                                | ServiceVolumeType::Bind(_) => "--volume",
+                                                ServiceVolumeType::Tmpfs => "--tmpfs",
+                                            }),
+                                            volume.to_string(),
+                                        ]
+                                    })
+                                    .collect::<Vec<_>>();
+                                let secrets = service
+                                    .secrets
+                                    .iter()
+                                    .map(|secret| {
+                                        FileReference {
+                                            source: file.secrets[&secret.source]
+                                                .name
+                                                .clone()
+                                                .unwrap(),
+                                            ..secret.clone()
+                                        }
+                                        .to_string()
+                                    })
+                                    .collect::<Vec<_>>();
+
                                 podman
                                     .run(
                                         global_args
@@ -396,11 +450,9 @@ async fn create_containers(
                                             } else {
                                                 vec![]
                                             })
-                                            .chain(if let Some(pull_policy) = &pull_policy {
-                                                vec!["--pull", pull_policy]
-                                            } else {
-                                                vec![]
-                                            })
+                                            .chain(requirements.iter().flat_map(|requirement| {
+                                                ["--requires", requirement]
+                                            }))
                                             .chain(
                                                 labels.iter().flat_map(|label| ["--label", label]),
                                             )
@@ -409,9 +461,22 @@ async fn create_containers(
                                                     .iter()
                                                     .flat_map(|label| ["--label", label]),
                                             )
-                                            .chain(requirements.iter().flat_map(|requirement| {
-                                                ["--requires", requirement]
-                                            }))
+                                            .chain(if let Some(pull_policy) = &pull_policy {
+                                                vec!["--pull", pull_policy]
+                                            } else {
+                                                vec![]
+                                            })
+                                            .chain(
+                                                networks
+                                                    .iter()
+                                                    .flat_map(|network| ["--network", network]),
+                                            )
+                                            .chain(volumes.iter().map(AsRef::as_ref))
+                                            .chain(
+                                                secrets
+                                                    .iter()
+                                                    .flat_map(|secret| ["--secret", secret]),
+                                            )
                                             .chain(service_args.iter().map(AsRef::as_ref)),
                                     )
                                     .await
@@ -442,9 +507,12 @@ async fn create_containers(
         .map(|_| ())
 }
 
-pub(crate) async fn run(args: Args, config: &Config) -> Result<()> {
-    let podman = Podman::new(config).await?;
-    let mut file = compose::parse(config, false)?;
+pub(crate) async fn run(
+    args: Args,
+    podman: &Podman,
+    file: &Compose,
+    config: &Config,
+) -> Result<()> {
     let name = file.name.as_ref().unwrap();
     let labels = [("version", crate_version!()), ("project", name)]
         .into_iter()
@@ -478,6 +546,8 @@ pub(crate) async fn run(args: Args, config: &Config) -> Result<()> {
                 volumes: true,
                 rmi: false,
             },
+            &podman,
+            &file,
             config,
         )
         .await?;
@@ -493,32 +563,6 @@ pub(crate) async fn run(args: Args, config: &Config) -> Result<()> {
     )?;
 
     progress.finish();
-
-    for service in file.services.values_mut() {
-        service.networks = mem::take(&mut service.networks)
-            .into_iter()
-            .map(|(name, network)| (file.networks[&name].name.clone().unwrap(), network))
-            .collect();
-
-        service.volumes = mem::take(&mut service.volumes)
-            .into_iter()
-            .map(|volume| match volume.r#type {
-                ServiceVolumeType::Volume(Some(source)) => ServiceVolume {
-                    r#type: ServiceVolumeType::Volume(file.volumes[&source].name.clone()),
-                    ..volume
-                },
-                _ => volume,
-            })
-            .collect();
-
-        service.secrets = mem::take(&mut service.secrets)
-            .into_iter()
-            .map(|secret| FileReference {
-                source: file.secrets[&secret.source].name.clone().unwrap(),
-                ..secret
-            })
-            .collect();
-    }
 
     let progress = Progress::new(config);
 

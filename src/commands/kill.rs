@@ -34,7 +34,7 @@ async fn kill_containers(
     progress: &Progress,
     file: &Compose,
     containers: &HashMap<String, Vec<String>>,
-    signal: &str,
+    args: Args,
 ) -> Result<()> {
     let dependencies = &file
         .services
@@ -64,6 +64,7 @@ async fn kill_containers(
         .map(|service| (service, broadcast::channel(capacity).0))
         .collect::<IndexMap<_, _>>();
     let barrier = &Barrier::new(containers.values().map(Vec::len).sum());
+    let args = &args;
 
     containers
         .iter()
@@ -81,7 +82,7 @@ async fn kill_containers(
                     }
 
                     podman
-                        .run(["kill", "--signal", signal, container])
+                        .run(["kill", "--signal", &args.signal, container])
                         .await
                         .finish_with_message(spinner, "Killed")
                 })
@@ -143,7 +144,7 @@ pub(crate) async fn run(
     if !containers.is_empty() {
         let progress = Progress::new(config);
 
-        kill_containers(podman, &progress, file, &containers, &args.signal).await?;
+        kill_containers(podman, &progress, file, &containers, args).await?;
 
         progress.finish();
     }

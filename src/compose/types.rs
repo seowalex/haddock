@@ -490,10 +490,6 @@ impl Service {
             }
         }
 
-        if let Some(mac_address) = self.mac_address.as_ref().cloned() {
-            args.extend([String::from("--mac-address"), mac_address]);
-        }
-
         if let Some(mem_swappiness) = self.mem_swappiness {
             args.extend([
                 String::from("--memory-swappiness"),
@@ -503,10 +499,6 @@ impl Service {
 
         if let Some(memswap_limit) = &self.memswap_limit {
             args.extend([String::from("--memory-swap"), memswap_limit.to_string()]);
-        }
-
-        for network in self.networks.keys().cloned() {
-            args.extend([String::from("--network"), network]);
         }
 
         if let Some(network_mode) = self.network_mode.as_ref().cloned() {
@@ -547,10 +539,6 @@ impl Service {
 
         if let Some(runtime) = self.runtime.as_ref().cloned() {
             global_args.extend([String::from("--runtime"), runtime]);
-        }
-
-        for secret in &self.secrets {
-            args.extend([String::from("--secret"), secret.to_string()]);
         }
 
         for (key, value) in &self.security_opt {
@@ -609,16 +597,6 @@ impl Service {
 
         if let Some(userns_mode) = self.userns_mode.as_ref().cloned() {
             args.extend([String::from("--userns"), userns_mode]);
-        }
-
-        for volume in &self.volumes {
-            args.extend([
-                String::from(match volume.r#type {
-                    ServiceVolumeType::Volume(_) | ServiceVolumeType::Bind(_) => "--volume",
-                    ServiceVolumeType::Tmpfs => "--tmpfs",
-                }),
-                volume.to_string(),
-            ]);
         }
 
         for volume in self.volumes_from.iter().cloned() {
@@ -875,9 +853,30 @@ pub(crate) struct ServiceNetwork {
     pub(crate) ipv4_address: Option<String>,
     #[serde_as(as = "Option<DisplayFromAny>")]
     pub(crate) ipv6_address: Option<String>,
-    #[serde_as(as = "Vec<DisplayFromAny>")]
-    pub(crate) link_local_ips: Vec<String>,
-    pub(crate) priority: Option<i32>,
+}
+
+impl Display for ServiceNetwork {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let mut options = Vec::new();
+
+        for alias in &self.aliases {
+            options.push(format!("alias={alias}"));
+        }
+
+        if let Some(ipv4_address) = &self.ipv4_address {
+            options.push(format!("ip={ipv4_address}"));
+        }
+
+        if let Some(ipv6_address) = &self.ipv6_address {
+            options.push(format!("ip={ipv6_address}"));
+        }
+
+        if options.is_empty() {
+            write!(f, "")
+        } else {
+            write!(f, ":{}", options.join(","))
+        }
+    }
 }
 
 #[skip_serializing_none]
@@ -955,7 +954,7 @@ impl Display for RestartPolicy {
 
 #[skip_serializing_none]
 #[serde_as]
-#[derive(Serialize, Deserialize, Default, Debug)]
+#[derive(Serialize, Deserialize, Clone, Default, Debug)]
 pub(crate) struct FileReference {
     #[serde_as(as = "DisplayFromAny")]
     pub(crate) source: String,
@@ -1025,7 +1024,7 @@ impl Display for ResourceLimit {
 
 #[skip_serializing_none]
 #[serde_as]
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub(crate) struct ServiceVolume {
     #[serde(flatten)]
     pub(crate) r#type: ServiceVolumeType,
@@ -1108,7 +1107,7 @@ impl Display for ServiceVolume {
 
 #[skip_serializing_none]
 #[serde_as]
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(tag = "type", content = "source", rename_all = "lowercase")]
 pub(crate) enum ServiceVolumeType {
     Volume(#[serde_as(as = "Option<DisplayFromAny>")] Option<String>),
@@ -1117,14 +1116,14 @@ pub(crate) enum ServiceVolumeType {
 }
 
 #[skip_serializing_none]
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub(crate) struct ServiceVolumeVolume {
     pub(crate) nocopy: Option<bool>,
 }
 
 #[skip_serializing_none]
 #[serde_as]
-#[derive(Serialize, Deserialize, Default, Debug)]
+#[derive(Serialize, Deserialize, Clone, Default, Debug)]
 pub(crate) struct ServiceVolumeBind {
     #[serde_as(as = "Option<DisplayFromAny>")]
     pub(crate) propagation: Option<String>,
@@ -1135,7 +1134,7 @@ pub(crate) struct ServiceVolumeBind {
 
 #[skip_serializing_none]
 #[serde_as]
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub(crate) struct ServiceVolumeTmpfs {
     pub(crate) size: Option<Byte>,
     #[serde_as(as = "Option<PickFirst<(_, DisplayFromStr)>>")]
