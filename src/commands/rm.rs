@@ -123,8 +123,6 @@ pub(crate) async fn run(
     file: &Compose,
     config: &Config,
 ) -> Result<()> {
-    let name = file.name.as_ref().unwrap();
-
     let output = podman
         .force_run([
             "ps",
@@ -132,7 +130,7 @@ pub(crate) async fn run(
             "--format",
             "json",
             "--filter",
-            &format!("pod={name}"),
+            &format!("pod={}", file.name.as_ref().unwrap()),
         ])
         .await?;
     let containers = serde_json::from_str::<Vec<Container>>(&output)?

@@ -1,6 +1,5 @@
 use anyhow::Result;
 use futures::{stream::FuturesUnordered, TryFutureExt, TryStreamExt};
-use itertools::Itertools;
 
 use crate::{
     compose::types::Compose,
@@ -15,8 +14,6 @@ pub(crate) struct Args {
 }
 
 pub(crate) async fn run(args: Args, podman: &Podman, file: &Compose) -> Result<()> {
-    let name = file.name.as_ref().unwrap();
-
     let output = podman
         .force_run([
             "ps",
@@ -26,7 +23,7 @@ pub(crate) async fn run(args: Args, podman: &Podman, file: &Compose) -> Result<(
             "--filter",
             "status=running",
             "--filter",
-            &format!("pod={name}"),
+            &format!("pod={}", file.name.as_ref().unwrap()),
         ])
         .await?;
     let containers = serde_json::from_str::<Vec<Container>>(&output)?
@@ -36,9 +33,7 @@ pub(crate) async fn run(args: Args, podman: &Podman, file: &Compose) -> Result<(
                 .labels
                 .and_then(|labels| labels.service)
                 .and_then(|service| {
-                    if args.services.contains(&service)
-                        || (args.services.is_empty() && file.services.keys().contains(&service))
-                    {
+                    if args.services.is_empty() || args.services.contains(&service) {
                         container.names.pop_front()
                     } else {
                         None
@@ -55,13 +50,11 @@ pub(crate) async fn run(args: Args, podman: &Podman, file: &Compose) -> Result<(
                 .map(|container| {
                     podman
                         .run(["top", container])
-                        .map_ok(move |output| (container, output))
+                        .map_ok(move |output| format!("{container}\n{output}"))
                 })
                 .collect::<FuturesUnordered<_>>()
                 .try_collect::<Vec<_>>()
                 .await?
-                .into_iter()
-                .map(|(container, output)| format!("{container}\n{output}"))
                 .join("\n")
         );
     }

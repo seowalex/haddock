@@ -36,8 +36,6 @@ impl Display for Protocol {
 }
 
 pub(crate) async fn run(args: Args, podman: &Podman, file: &Compose) -> Result<()> {
-    let name = file.name.as_ref().unwrap();
-
     let output = podman
         .force_run([
             "ps",
@@ -45,7 +43,7 @@ pub(crate) async fn run(args: Args, podman: &Podman, file: &Compose) -> Result<(
             "--format",
             "json",
             "--filter",
-            &format!("pod={name}"),
+            &format!("pod={}", file.name.as_ref().unwrap()),
             "--filter",
             &format!("label=io.podman.compose.service={}", args.service),
         ])

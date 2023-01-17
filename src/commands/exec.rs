@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use anyhow::{anyhow, Result};
 use atty::Stream;
 
@@ -40,12 +42,10 @@ pub(crate) struct Args {
 
     /// Path to workdir directory for this command
     #[arg(short, long)]
-    workdir: Option<String>,
+    workdir: Option<PathBuf>,
 }
 
 pub(crate) async fn run(args: Args, podman: &Podman, file: &Compose) -> Result<()> {
-    let name = file.name.as_ref().unwrap();
-
     let output = podman
         .force_run([
             "ps",
@@ -53,7 +53,7 @@ pub(crate) async fn run(args: Args, podman: &Podman, file: &Compose) -> Result<(
             "--format",
             "json",
             "--filter",
-            &format!("pod={name}"),
+            &format!("pod={}", file.name.as_ref().unwrap()),
         ])
         .await?;
     let container = serde_json::from_str::<Vec<Container>>(&output)?
@@ -66,7 +66,7 @@ pub(crate) async fn run(args: Args, podman: &Podman, file: &Compose) -> Result<(
                     .unwrap_or_default()
                     && labels
                         .container_number
-                        .map(|n| args.index == n)
+                        .map(|n| n == args.index)
                         .unwrap_or_default()
                 {
                     container.names.pop_front()
@@ -82,6 +82,9 @@ pub(crate) async fn run(args: Args, podman: &Podman, file: &Compose) -> Result<(
                 args.index
             )
         })?;
+    let workdir = args
+        .workdir
+        .map(|workdir| workdir.to_string_lossy().to_string());
 
     podman
         .attach(
@@ -104,7 +107,7 @@ pub(crate) async fn run(args: Args, podman: &Podman, file: &Compose) -> Result<(
                     vec![]
                 })
                 .chain(if args.no_tty { vec![] } else { vec!["--tty"] })
-                .chain(if let Some(workdir) = args.workdir.as_ref() {
+                .chain(if let Some(workdir) = workdir.as_ref() {
                     vec!["--workdir", workdir]
                 } else {
                     vec![]

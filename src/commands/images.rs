@@ -1,7 +1,6 @@
 use anyhow::Result;
 use clap::ValueEnum;
 use indexmap::IndexSet;
-use itertools::Itertools;
 
 use crate::{
     compose::types::Compose,
@@ -30,8 +29,6 @@ enum Format {
 }
 
 pub(crate) async fn run(args: Args, podman: &Podman, file: &Compose) -> Result<()> {
-    let name = file.name.as_ref().unwrap();
-
     let output = podman
         .force_run([
             "ps",
@@ -39,7 +36,7 @@ pub(crate) async fn run(args: Args, podman: &Podman, file: &Compose) -> Result<(
             "--format",
             "json",
             "--filter",
-            &format!("pod={name}"),
+            &format!("pod={}", file.name.as_ref().unwrap()),
         ])
         .await?;
     let images = serde_json::from_str::<Vec<Container>>(&output)?
@@ -49,9 +46,7 @@ pub(crate) async fn run(args: Args, podman: &Podman, file: &Compose) -> Result<(
                 .labels
                 .and_then(|labels| labels.service)
                 .and_then(|service| {
-                    if args.services.contains(&service)
-                        || (args.services.is_empty() && file.services.keys().contains(&service))
-                    {
+                    if args.services.is_empty() || args.services.contains(&service) {
                         Some(container.image_id)
                     } else {
                         None

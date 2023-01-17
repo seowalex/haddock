@@ -74,8 +74,8 @@ pub(crate) async fn run(args: Args, podman: &Podman, file: &Compose) -> Result<(
         .force_run(
             ["ps", "--format", "json", "--filter", &format!("pod={name}")]
                 .into_iter()
-                .chain(if args.all { vec!["--all"] } else { vec![] })
-                .chain(filters.iter().flat_map(|filter| ["--filter", filter])),
+                .chain(filters.iter().flat_map(|filter| ["--filter", filter]))
+                .chain(if args.all { vec!["--all"] } else { vec![] }),
         )
         .await?;
     let containers = serde_json::from_str::<Vec<Container>>(&output)?
@@ -119,7 +119,6 @@ pub(crate) async fn run(args: Args, podman: &Podman, file: &Compose) -> Result<(
                 .run(
                     ["ps", "--filter", &format!("pod={name}")]
                         .into_iter()
-                        .chain(if args.all { vec!["--all"] } else { vec![] })
                         .chain([
                             "--format",
                             match args.format {
@@ -129,6 +128,7 @@ pub(crate) async fn run(args: Args, podman: &Podman, file: &Compose) -> Result<(
                             }
                         ])
                         .chain(filters.iter().flat_map(|filter| ["--filter", filter]))
+                        .chain(if args.all { vec!["--all"] } else { vec![] })
                 )
                 .await?
         );

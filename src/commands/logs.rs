@@ -44,7 +44,6 @@ pub(crate) struct Args {
 }
 
 pub(crate) async fn run(args: Args, podman: &Podman, file: &Compose) -> Result<()> {
-    let name = file.name.as_ref().unwrap();
     let tail = args.tail.map(|tail| tail.to_string());
 
     let output = podman
@@ -54,7 +53,7 @@ pub(crate) async fn run(args: Args, podman: &Podman, file: &Compose) -> Result<(
             "--format",
             "json",
             "--filter",
-            &format!("pod={name}"),
+            &format!("pod={}", file.name.as_ref().unwrap()),
         ])
         .await?;
     let containers = serde_json::from_str::<Vec<Container>>(&output)?
@@ -76,8 +75,8 @@ pub(crate) async fn run(args: Args, podman: &Podman, file: &Compose) -> Result<(
         .collect::<Vec<_>>();
 
     if !containers.is_empty() {
-        let width = containers.iter().map(String::len).max().unwrap_or_default();
         let colours = ["cyan", "yellow", "green", "magenta", "blue"];
+        let width = containers.iter().map(String::len).max().unwrap_or_default();
 
         let mut output = select_all(
             containers

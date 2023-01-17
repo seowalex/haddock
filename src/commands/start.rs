@@ -22,7 +22,7 @@ async fn start_containers(
     podman: &Podman,
     progress: &Progress,
     file: &Compose,
-    name: &str,
+    project_name: &str,
     args: Args,
 ) -> Result<()> {
     let mut dependencies = file
@@ -72,8 +72,8 @@ async fn start_containers(
     let barrier = &Barrier::new(
         file.services
             .iter()
-            .filter_map(|(service_name, service)| {
-                if dependencies.contains_node(service_name) {
+            .filter_map(|(name, service)| {
+                if dependencies.contains_node(name) {
                     Some(
                         service
                             .deploy
@@ -105,7 +105,7 @@ async fn start_containers(
                             let container_name = service
                                 .container_name
                                 .clone()
-                                .unwrap_or_else(|| format!("{name}_{service_name}_{i}"));
+                                .unwrap_or_else(|| format!("{project_name}_{service_name}_{i}"));
                             let spinner = progress
                                 .add_spinner(format!("Container {container_name}"), "Starting");
                             let mut rx = txs[service_name].subscribe();
@@ -149,17 +149,16 @@ pub(crate) async fn run(
     file: &Compose,
     config: &Config,
 ) -> Result<()> {
-    let name = file.name.as_ref().unwrap();
-
-    if !args
-        .services
-        .iter()
-        .collect::<IndexSet<_>>()
-        .is_disjoint(&file.services.keys().collect::<IndexSet<_>>())
+    if args.services.is_empty()
+        || !args
+            .services
+            .iter()
+            .collect::<IndexSet<_>>()
+            .is_disjoint(&file.services.keys().collect::<IndexSet<_>>())
     {
         let progress = Progress::new(config);
 
-        start_containers(podman, &progress, file, name, args).await?;
+        start_containers(podman, &progress, file, file.name.as_ref().unwrap(), args).await?;
 
         progress.finish();
     }

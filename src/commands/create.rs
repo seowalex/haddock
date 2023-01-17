@@ -253,7 +253,7 @@ async fn create_containers(
     progress: &Progress,
     file: &Compose,
     labels: &[String],
-    name: &str,
+    project_name: &str,
     args: Args,
 ) -> Result<()> {
     let mut dependencies = file
@@ -303,8 +303,8 @@ async fn create_containers(
     let barrier = &Barrier::new(
         file.services
             .iter()
-            .filter_map(|(service_name, service)| {
-                if dependencies.contains_node(service_name) {
+            .filter_map(|(name, service)| {
+                if dependencies.contains_node(name) {
                     Some(
                         service
                             .deploy
@@ -328,7 +328,7 @@ async fn create_containers(
         .filter_map(|(service_name, service)| {
             if dependencies.contains_node(service_name) {
                 Some(async move {
-                    let names = (1..=service
+                    let container_names = (1..=service
                         .deploy
                         .as_ref()
                         .and_then(|deploy| deploy.replicas)
@@ -338,7 +338,7 @@ async fn create_containers(
                             let container_name = service
                                 .container_name
                                 .clone()
-                                .unwrap_or_else(|| format!("{name}_{service_name}_{i}"));
+                                .unwrap_or_else(|| format!("{project_name}_{service_name}_{i}"));
                             let spinner = progress
                                 .add_spinner(format!("Container {container_name}"), "Creating");
                             let rx = txs[service_name].subscribe();
@@ -444,7 +444,7 @@ async fn create_containers(
                                         global_args
                                             .iter()
                                             .map(AsRef::as_ref)
-                                            .chain(["create", "--pod", name])
+                                            .chain(["create", "--pod", project_name])
                                             .chain(if service.container_name.is_none() {
                                                 vec!["--name", &container_name]
                                             } else {
@@ -492,7 +492,7 @@ async fn create_containers(
                         .await?;
 
                     for dependent in dependencies.neighbors(service_name) {
-                        txs[dependent].send(names.clone())?;
+                        txs[dependent].send(container_names.clone())?;
                     }
 
                     Ok(())
@@ -564,11 +564,12 @@ pub(crate) async fn run(
 
     progress.finish();
 
-    if !args
-        .services
-        .iter()
-        .collect::<IndexSet<_>>()
-        .is_disjoint(&file.services.keys().collect::<IndexSet<_>>())
+    if args.services.is_empty()
+        || !args
+            .services
+            .iter()
+            .collect::<IndexSet<_>>()
+            .is_disjoint(&file.services.keys().collect::<IndexSet<_>>())
     {
         let progress = Progress::new(config);
 

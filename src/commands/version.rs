@@ -1,7 +1,7 @@
 use clap::{crate_name, crate_version, ValueEnum};
 use serde_json::json;
 
-/// Print version information
+/// Print version
 #[derive(clap::Args, Debug)]
 #[command(next_display_order = None)]
 pub(crate) struct Args {

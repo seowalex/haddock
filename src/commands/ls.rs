@@ -3,7 +3,7 @@ use clap::ValueEnum;
 
 use crate::podman::Podman;
 
-/// List running compose projects
+/// List running Compose projects
 #[derive(clap::Args, Debug)]
 #[command(next_display_order = None)]
 pub(crate) struct Args {
@@ -18,6 +18,10 @@ pub(crate) struct Args {
     /// Filter output based on conditions provided
     #[arg(long)]
     filter: Vec<String>,
+
+    /// Show all stopped Compose projects
+    #[arg(short, long)]
+    all: bool,
 }
 
 #[derive(ValueEnum, PartialEq, Clone, Debug)]
@@ -41,6 +45,11 @@ pub(crate) async fn run(args: Args, podman: &Podman) -> Result<()> {
                     ]
                     .into_iter()
                     .chain(args.filter.iter().flat_map(|filter| ["--filter", filter]))
+                    .chain(if args.all {
+                        vec![]
+                    } else {
+                        vec!["--filter", "status=running"]
+                    })
                 )
                 .await?
         );
@@ -60,6 +69,11 @@ pub(crate) async fn run(args: Args, podman: &Podman) -> Result<()> {
                             }
                         ])
                         .chain(args.filter.iter().flat_map(|filter| ["--filter", filter]))
+                        .chain(if args.all {
+                            vec![]
+                        } else {
+                            vec!["--filter", "status=running"]
+                        })
                 )
                 .await?
         );
