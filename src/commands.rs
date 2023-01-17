@@ -16,13 +16,13 @@ pub(crate) enum Command {
 
 #[derive(Subcommand, Debug)]
 pub(crate) enum ExtCommand {
-    Down(down::Args), //Includes one-offs if --remove-orphans
+    Down(down::Args),
     Create(create::Args),
     Rm(rm::Args),
     Start(start::Args),
     Stop(stop::Args),
     Restart(restart::Args),
-    Kill(kill::Args), // Includes one-offs
+    Kill(kill::Args),
     Pause(pause::Args),
     Unpause(unpause::Args),
     Run(run::Args),
@@ -30,9 +30,9 @@ pub(crate) enum ExtCommand {
     Cp(cp::Args),
     Events(events::Args),
     Logs(logs::Args),
-    Ps(ps::Args),         // Includes one-offs if --all
-    Top(top::Args),       // Includes one-offs
-    Images(images::Args), // Includes one-offs
+    Ps(ps::Args),
+    Top(top::Args),
+    Images(images::Args),
     Port(port::Args),
     Ls(ls::Args),
 }

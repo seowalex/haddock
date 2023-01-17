@@ -52,6 +52,8 @@ pub(crate) async fn run(
             "--filter",
             "status=paused",
             "--filter",
+            "label=io.podman.compose.oneoff=false",
+            "--filter",
             &format!("pod={}", file.name.as_ref().unwrap()),
         ])
         .await?;

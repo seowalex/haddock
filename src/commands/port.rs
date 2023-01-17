@@ -43,6 +43,8 @@ pub(crate) async fn run(args: Args, podman: &Podman, file: &Compose) -> Result<(
             "--format",
             "json",
             "--filter",
+            "label=io.podman.compose.oneoff=false",
+            "--filter",
             &format!("pod={}", file.name.as_ref().unwrap()),
             "--filter",
             &format!("label=io.podman.compose.service={}", args.service),

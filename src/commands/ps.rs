@@ -75,7 +75,11 @@ pub(crate) async fn run(args: Args, podman: &Podman, file: &Compose) -> Result<(
             ["ps", "--format", "json", "--filter", &format!("pod={name}")]
                 .into_iter()
                 .chain(filters.iter().flat_map(|filter| ["--filter", filter]))
-                .chain(if args.all { vec!["--all"] } else { vec![] }),
+                .chain(if args.all {
+                    vec!["--all"]
+                } else {
+                    vec!["--filter", "label=io.podman.compose.oneoff=false"]
+                }),
         )
         .await?;
     let containers = serde_json::from_str::<Vec<Container>>(&output)?

@@ -80,14 +80,22 @@ pub(crate) async fn run(
     let name = file.name.as_ref().unwrap();
 
     let (containers, networks, volumes) = try_join3(
-        podman.force_run([
-            "ps",
-            "--all",
-            "--format",
-            "json",
-            "--filter",
-            &format!("pod={name}"),
-        ]),
+        podman.force_run(
+            [
+                "ps",
+                "--all",
+                "--format",
+                "json",
+                "--filter",
+                &format!("pod={name}"),
+            ]
+            .into_iter()
+            .chain(if args.remove_orphans {
+                vec![]
+            } else {
+                vec!["--filter", "label=io.podman.compose.oneoff=false"]
+            }),
+        ),
         podman.force_run([
             "network",
             "ls",

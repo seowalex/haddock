@@ -111,6 +111,8 @@ pub(crate) async fn run(
             "--format",
             "json",
             "--filter",
+            "label=io.podman.compose.oneoff=false",
+            "--filter",
             &format!("pod={}", file.name.as_ref().unwrap()),
         ])
         .await?;
