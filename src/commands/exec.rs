@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Result};
+use atty::Stream;
 
 use crate::{
     compose::types::Compose,
@@ -34,7 +35,7 @@ pub(crate) struct Args {
     user: Option<String>,
 
     /// Disable pseudo-TTY allocation
-    #[arg(short = 'T', long = "no-TTY")]
+    #[arg(short = 'T', long = "no-TTY", default_value_t = !atty::is(Stream::Stdout))]
     no_tty: bool,
 
     /// Path to workdir directory for this command

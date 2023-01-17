@@ -7,6 +7,15 @@ use crate::{compose, config::Config, podman::Podman};
 
 #[derive(Subcommand, Debug)]
 pub(crate) enum Command {
+    #[command(flatten)]
+    ExtCommand(ExtCommand),
+
+    Convert(convert::Args),
+    Version(version::Args),
+}
+
+#[derive(Subcommand, Debug)]
+pub(crate) enum ExtCommand {
     Down(down::Args),
     Create(create::Args),
     Rm(rm::Args),
@@ -25,41 +34,37 @@ pub(crate) enum Command {
     Images(images::Args),
     Port(port::Args),
     Ls(ls::Args),
-    Convert(convert::Args),
-    Version(version::Args),
 }
 
 pub(crate) async fn run(command: Command, config: Config) -> Result<()> {
     match command {
-        Command::Convert(args) => convert::run(args, &config)?,
-        Command::Version(args) => version::run(args),
-
-        command => {
+        Command::ExtCommand(command) => {
             let podman = Podman::new(&config).await?;
             let file = compose::parse(&config, false)?;
 
             match command {
-                Command::Down(args) => down::run(args, &podman, &file, &config).await,
-                Command::Create(args) => create::run(args, &podman, &file, &config).await,
-                Command::Rm(args) => rm::run(args, &podman, &file, &config).await,
-                Command::Start(args) => start::run(args, &podman, &file, &config).await,
-                Command::Stop(args) => stop::run(args, &podman, &file, &config).await,
-                Command::Restart(args) => restart::run(args, &podman, &file, &config).await,
-                Command::Kill(args) => kill::run(args, &podman, &file, &config).await,
-                Command::Pause(args) => pause::run(args, &podman, &file, &config).await,
-                Command::Unpause(args) => unpause::run(args, &podman, &file, &config).await,
-                Command::Exec(args) => exec::run(args, &podman, &file).await,
-                Command::Cp(args) => cp::run(args, &podman, &file).await,
-                Command::Events(args) => events::run(args, &podman, &file).await,
-                Command::Logs(args) => logs::run(args, &podman, &file).await,
-                Command::Top(args) => top::run(args, &podman, &file).await,
-                Command::Ps(args) => ps::run(args, &podman, &file).await,
-                Command::Images(args) => images::run(args, &podman, &file).await,
-                Command::Port(args) => port::run(args, &podman, &file).await,
-                Command::Ls(args) => ls::run(args, &podman).await,
-                _ => unreachable!(),
+                ExtCommand::Down(args) => down::run(args, &podman, &file, &config).await,
+                ExtCommand::Create(args) => create::run(args, &podman, &file, &config).await,
+                ExtCommand::Rm(args) => rm::run(args, &podman, &file, &config).await,
+                ExtCommand::Start(args) => start::run(args, &podman, &file, &config).await,
+                ExtCommand::Stop(args) => stop::run(args, &podman, &file, &config).await,
+                ExtCommand::Restart(args) => restart::run(args, &podman, &file, &config).await,
+                ExtCommand::Kill(args) => kill::run(args, &podman, &file, &config).await,
+                ExtCommand::Pause(args) => pause::run(args, &podman, &file, &config).await,
+                ExtCommand::Unpause(args) => unpause::run(args, &podman, &file, &config).await,
+                ExtCommand::Exec(args) => exec::run(args, &podman, &file).await,
+                ExtCommand::Cp(args) => cp::run(args, &podman, &file).await,
+                ExtCommand::Events(args) => events::run(args, &podman, &file).await,
+                ExtCommand::Logs(args) => logs::run(args, &podman, &file).await,
+                ExtCommand::Top(args) => top::run(args, &podman, &file).await,
+                ExtCommand::Ps(args) => ps::run(args, &podman, &file).await,
+                ExtCommand::Images(args) => images::run(args, &podman, &file).await,
+                ExtCommand::Port(args) => port::run(args, &podman, &file).await,
+                ExtCommand::Ls(args) => ls::run(args, &podman).await,
             }?
         }
+        Command::Convert(args) => convert::run(args, &config)?,
+        Command::Version(args) => version::run(args),
     }
 
     Ok(())
