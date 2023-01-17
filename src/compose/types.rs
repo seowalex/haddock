@@ -1305,8 +1305,8 @@ serde_conv!(
     AbsPathBuf,
     PathBuf,
     |path: &PathBuf| path.to_string_lossy().to_string(),
-    |path: &str| -> Result<_> {
-        Path::new(path)
+    |path: String| -> Result<_> {
+        Path::new(&path)
             .absolutize()
             .map_err(Error::from)
             .map(PathBuf::from)
@@ -1317,7 +1317,7 @@ serde_conv!(
     BuildConfigOrPathBuf,
     BuildConfig,
     |build: &BuildConfig| build.context.clone(),
-    |context: &Path| -> Result<_> {
+    |context: PathBuf| -> Result<_> {
         context
             .absolutize()
             .map_err(Error::from)
@@ -1333,7 +1333,7 @@ serde_conv!(
     CommandOrString,
     Vec<String>,
     shell_words::join,
-    |args: &str| { shell_words::split(args).map_err(Error::from) }
+    |args: String| { shell_words::split(&args).map_err(Error::from) }
 );
 
 serde_conv!(
@@ -1361,7 +1361,7 @@ serde_conv!(
     DeviceOrString,
     Device,
     ToString::to_string,
-    |device: &str| -> Result<_> {
+    |device: String| -> Result<_> {
         let mut parts = device.split(':');
 
         Ok(Device {
@@ -1379,7 +1379,7 @@ serde_conv!(
     DurationWithSuffix,
     Duration,
     |duration: &Duration| format_duration(*duration).to_string(),
-    |duration: &str| parse_duration(duration)
+    |duration: String| parse_duration(&duration)
 );
 
 serde_conv!(
@@ -1597,7 +1597,9 @@ pub(crate) fn parse_port(port: &str) -> Result<Port, Infallible> {
     })
 }
 
-serde_conv!(PortOrString, Port, ToString::to_string, parse_port);
+serde_conv!(PortOrString, Port, ToString::to_string, |port: String| {
+    parse_port(&port)
+});
 
 serde_conv!(
     PortOrU16,
@@ -1744,7 +1746,7 @@ serde_conv!(
     ServiceVolumeOrString,
     ServiceVolume,
     ToString::to_string,
-    parse_service_volume
+    |mount: String| parse_service_volume(&mount)
 );
 
 #[cfg(test)]
