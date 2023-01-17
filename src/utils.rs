@@ -7,7 +7,7 @@ use std::{
     str::FromStr,
 };
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use console::{style, StyledObject};
 use indexmap::IndexSet;
 use once_cell::sync::Lazy;
@@ -23,7 +23,7 @@ use sha2::{Digest as _, Sha256};
 pub(crate) static STYLED_WARNING: Lazy<StyledObject<&str>> =
     Lazy::new(|| style("Warning:").yellow().bold());
 
-pub(crate) fn parse_colon_delimited<T, U>(s: &str) -> Result<(Option<T>, U)>
+pub(crate) fn parse_container_path<T, U>(s: &str) -> Result<(Option<T>, U)>
 where
     T: FromStr,
     T::Err: Error + Send + Sync + 'static,
@@ -34,6 +34,38 @@ where
         Ok((Some(s[..pos].parse()?), s[pos + 1..].parse()?))
     } else {
         Ok((None, s.parse()?))
+    }
+}
+
+pub(crate) fn parse_key_val<T, U>(s: &str) -> Result<(T, U)>
+where
+    T: FromStr,
+    T::Err: Error + Send + Sync + 'static,
+    U: FromStr,
+    U::Err: Error + Send + Sync + 'static,
+{
+    let pos = s.find('=').ok_or_else(|| {
+        anyhow!(
+            "no '{}' found in '{}'",
+            style("=").yellow(),
+            style(s).yellow()
+        )
+    })?;
+
+    Ok((s[..pos].parse()?, s[pos + 1..].parse()?))
+}
+
+pub(crate) fn parse_key_val_opt<T, U>(s: &str) -> Result<(T, Option<U>)>
+where
+    T: FromStr,
+    T::Err: Error + Send + Sync + 'static,
+    U: FromStr,
+    U::Err: Error + Send + Sync + 'static,
+{
+    if let Some(pos) = s.find('=') {
+        Ok((s[..pos].parse()?, Some(s[pos + 1..].parse()?)))
+    } else {
+        Ok((s.parse()?, None))
     }
 }
 

@@ -16,22 +16,23 @@ pub(crate) enum Command {
 
 #[derive(Subcommand, Debug)]
 pub(crate) enum ExtCommand {
-    Down(down::Args),
+    Down(down::Args), //Includes one-offs if --remove-orphans
     Create(create::Args),
     Rm(rm::Args),
     Start(start::Args),
     Stop(stop::Args),
     Restart(restart::Args),
-    Kill(kill::Args),
+    Kill(kill::Args), // Includes one-offs
     Pause(pause::Args),
     Unpause(unpause::Args),
+    Run(run::Args),
     Exec(exec::Args),
     Cp(cp::Args),
     Events(events::Args),
     Logs(logs::Args),
-    Ps(ps::Args),
-    Top(top::Args),
-    Images(images::Args),
+    Ps(ps::Args),         // Includes one-offs if --all
+    Top(top::Args),       // Includes one-offs
+    Images(images::Args), // Includes one-offs
     Port(port::Args),
     Ls(ls::Args),
 }
@@ -52,6 +53,7 @@ pub(crate) async fn run(command: Command, config: Config) -> Result<()> {
                 ExtCommand::Kill(args) => kill::run(args, &podman, &file, &config).await,
                 ExtCommand::Pause(args) => pause::run(args, &podman, &file, &config).await,
                 ExtCommand::Unpause(args) => unpause::run(args, &podman, &file, &config).await,
+                ExtCommand::Run(args) => run::run(args, &podman, &file, &config).await,
                 ExtCommand::Exec(args) => exec::run(args, &podman, &file).await,
                 ExtCommand::Cp(args) => cp::run(args, &podman, &file).await,
                 ExtCommand::Events(args) => events::run(args, &podman, &file).await,

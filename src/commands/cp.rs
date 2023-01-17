@@ -4,17 +4,17 @@ use itertools::Itertools;
 use crate::{
     compose::types::Compose,
     podman::{types::Container, Podman},
-    utils::parse_colon_delimited,
+    utils::parse_container_path,
 };
 
 /// Copy files/folders between a service container and the local filesystem
 #[derive(clap::Args, Debug)]
 #[command(next_display_order = None)]
 pub(crate) struct Args {
-    #[arg(value_parser = parse_colon_delimited::<String, String>)]
+    #[arg(value_parser = parse_container_path::<String, String>)]
     source: (Option<String>, String),
 
-    #[arg(value_parser = parse_colon_delimited::<String, String>)]
+    #[arg(value_parser = parse_container_path::<String, String>)]
     destination: (Option<String>, String),
 
     /// Index of the container if there are multiple instances of a service

@@ -15,14 +15,13 @@ use crate::{
 #[derive(clap::Args, Debug)]
 #[command(next_display_order = None)]
 pub(crate) struct Args {
-    services: Vec<String>,
+    pub(crate) services: Vec<String>,
 }
 
 async fn start_containers(
     podman: &Podman,
     progress: &Progress,
     file: &Compose,
-    project_name: &str,
     args: Args,
 ) -> Result<()> {
     let mut dependencies = file
@@ -102,10 +101,10 @@ async fn start_containers(
                         .or(service.scale)
                         .unwrap_or(1))
                         .map(|i| async move {
-                            let container_name = service
-                                .container_name
-                                .clone()
-                                .unwrap_or_else(|| format!("{project_name}_{service_name}_{i}"));
+                            let container_name =
+                                service.container_name.clone().unwrap_or_else(|| {
+                                    format!("{}_{service_name}_{i}", file.name.as_ref().unwrap())
+                                });
                             let spinner = progress
                                 .add_spinner(format!("Container {container_name}"), "Starting");
                             let mut rx = txs[service_name].subscribe();
@@ -158,7 +157,7 @@ pub(crate) async fn run(
     {
         let progress = Progress::new(config);
 
-        start_containers(podman, &progress, file, file.name.as_ref().unwrap(), args).await?;
+        start_containers(podman, &progress, file, args).await?;
 
         progress.finish();
     }

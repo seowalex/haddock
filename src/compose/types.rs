@@ -74,7 +74,7 @@ impl Compose {
     IndexSet => #[serde(skip_serializing_if = "IndexSet::is_empty", default)],
     Vec => #[serde(skip_serializing_if = "Vec::is_empty", default)]
 )]
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub(crate) struct Service {
     pub(crate) blkio_config: Option<BlkioConfig>,
     #[serde_as(as = "Option<PickFirst<(_, BuildConfigOrPathBuf)>>")]
@@ -274,10 +274,6 @@ impl Service {
 
         if let Some(cgroup_parent) = self.cgroup_parent.as_ref().cloned() {
             args.extend([String::from("--cgroup-parent"), cgroup_parent]);
-        }
-
-        if let Some(container_name) = self.container_name.as_ref().cloned() {
-            args.extend([String::from("--name"), container_name]);
         }
 
         if let Some(cpu_period) = self.cpu_period {
@@ -626,7 +622,7 @@ impl Service {
 #[serde_with::apply(
     Vec => #[serde(skip_serializing_if = "Vec::is_empty", default)]
 )]
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub(crate) struct BlkioConfig {
     pub(crate) weight: Option<u16>,
     pub(crate) weight_device: Vec<WeightDevice>,
@@ -637,7 +633,7 @@ pub(crate) struct BlkioConfig {
 }
 
 #[serde_as]
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub(crate) struct WeightDevice {
     #[serde_as(as = "AbsPathBuf")]
     pub(crate) path: PathBuf,
@@ -651,7 +647,7 @@ impl Display for WeightDevice {
 }
 
 #[serde_as]
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub(crate) struct ThrottleDevice {
     #[serde_as(as = "AbsPathBuf")]
     pub(crate) path: PathBuf,
@@ -671,7 +667,7 @@ impl Display for ThrottleDevice {
     IndexSet => #[serde(skip_serializing_if = "IndexSet::is_empty", default)],
     Vec => #[serde(skip_serializing_if = "Vec::is_empty", default)]
 )]
-#[derive(Serialize, Deserialize, Default, Debug)]
+#[derive(Serialize, Deserialize, Clone, Default, Debug)]
 pub(crate) struct BuildConfig {
     #[serde_as(as = "PickFirst<(AbsPathBuf, DisplayFromAny)>")]
     pub(crate) context: PathBuf,
@@ -717,12 +713,12 @@ fn default_dockerfile() -> PathBuf {
     PathBuf::from("Dockerfile")
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub(crate) struct Dependency {
     pub(crate) condition: Condition,
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Clone, Debug)]
 pub(crate) enum Condition {
     #[serde(rename = "service_started")]
     Started,
@@ -733,14 +729,14 @@ pub(crate) enum Condition {
 }
 
 #[skip_serializing_none]
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub(crate) struct DeployConfig {
     pub(crate) replicas: Option<u32>,
     pub(crate) resources: Option<Resources>,
 }
 
 #[skip_serializing_none]
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub(crate) struct Resources {
     pub(crate) limits: Option<Resource>,
     pub(crate) reservations: Option<Resource>,
@@ -748,7 +744,7 @@ pub(crate) struct Resources {
 
 #[skip_serializing_none]
 #[serde_as]
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub(crate) struct Resource {
     #[serde_as(as = "Option<PickFirst<(_, DisplayFromStr)>>")]
     pub(crate) cpus: Option<f64>,
@@ -758,7 +754,7 @@ pub(crate) struct Resource {
 
 #[skip_serializing_none]
 #[serde_as]
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub(crate) struct Device {
     #[serde_as(as = "AbsPathBuf")]
     pub(crate) source: PathBuf,
@@ -800,7 +796,7 @@ impl Display for Device {
 #[serde_with::apply(
     Vec => #[serde(skip_serializing_if = "Vec::is_empty", default)]
 )]
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub(crate) struct Healthcheck {
     #[serde_as(as = "PickFirst<(_, CommandOrString)>")]
     pub(crate) test: Vec<String>,
@@ -818,13 +814,13 @@ pub(crate) struct Healthcheck {
 #[serde_with::apply(
     IndexMap => #[serde(skip_serializing_if = "IndexMap::is_empty", default)]
 )]
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub(crate) struct Logging {
     pub(crate) driver: Option<String>,
     pub(crate) options: IndexMap<String, String>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(untagged)]
 pub(crate) enum SwapLimit {
     Limited(Byte),
@@ -845,7 +841,7 @@ impl Display for SwapLimit {
 #[serde_with::apply(
     Vec => #[serde(skip_serializing_if = "Vec::is_empty", default)]
 )]
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub(crate) struct ServiceNetwork {
     #[serde_as(as = "Vec<DisplayFromAny>")]
     pub(crate) aliases: Vec<String>,
@@ -881,7 +877,7 @@ impl Display for ServiceNetwork {
 
 #[skip_serializing_none]
 #[serde_as]
-#[derive(Serialize, Deserialize, Default, Debug)]
+#[derive(Serialize, Deserialize, Clone, Default, Debug)]
 pub(crate) struct Port {
     #[serde_as(as = "DisplayFromAny")]
     pub(crate) target: String,
@@ -921,7 +917,7 @@ impl Display for Port {
     }
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Clone, Debug)]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum PullPolicy {
     Always,
@@ -937,7 +933,7 @@ impl Display for PullPolicy {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "kebab-case")]
 pub(crate) enum RestartPolicy {
     No,
@@ -1006,7 +1002,7 @@ impl Display for FileReference {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(untagged)]
 pub(crate) enum ResourceLimit {
     Single(i32),
@@ -1309,8 +1305,8 @@ serde_conv!(
     AbsPathBuf,
     PathBuf,
     |path: &PathBuf| path.to_string_lossy().to_string(),
-    |path: String| -> Result<_> {
-        Path::new(&path)
+    |path: &str| -> Result<_> {
+        Path::new(path)
             .absolutize()
             .map_err(Error::from)
             .map(PathBuf::from)
@@ -1321,7 +1317,7 @@ serde_conv!(
     BuildConfigOrPathBuf,
     BuildConfig,
     |build: &BuildConfig| build.context.clone(),
-    |context: PathBuf| -> Result<_> {
+    |context: &Path| -> Result<_> {
         context
             .absolutize()
             .map_err(Error::from)
@@ -1337,7 +1333,7 @@ serde_conv!(
     CommandOrString,
     Vec<String>,
     shell_words::join,
-    |args: String| { shell_words::split(&args).map_err(Error::from) }
+    |args: &str| { shell_words::split(args).map_err(Error::from) }
 );
 
 serde_conv!(
@@ -1365,7 +1361,7 @@ serde_conv!(
     DeviceOrString,
     Device,
     ToString::to_string,
-    |device: String| -> Result<_> {
+    |device: &str| -> Result<_> {
         let mut parts = device.split(':');
 
         Ok(Device {
@@ -1383,7 +1379,7 @@ serde_conv!(
     DurationWithSuffix,
     Duration,
     |duration: &Duration| format_duration(*duration).to_string(),
-    |duration: String| parse_duration(&duration)
+    |duration: &str| parse_duration(duration)
 );
 
 serde_conv!(
@@ -1393,7 +1389,7 @@ serde_conv!(
     |source| -> Result<_, Infallible> {
         Ok(FileReference {
             source,
-            ..Default::default()
+            ..FileReference::default()
         })
     }
 );
@@ -1579,32 +1575,29 @@ serde_conv!(
     }
 );
 
-serde_conv!(
-    PortOrString,
-    Port,
-    ToString::to_string,
-    |port: String| -> Result<_, Infallible> {
-        let mut parts = port.split(':').rev();
-        let container_port = parts.next().unwrap();
-        let mut container_parts = container_port.split('/');
-        let target = container_parts.next().unwrap().to_string();
+pub(crate) fn parse_port(port: &str) -> Result<Port, Infallible> {
+    let mut parts = port.split(':').rev();
+    let container_port = parts.next().unwrap();
+    let mut container_parts = container_port.split('/');
+    let target = container_parts.next().unwrap().to_string();
 
-        Ok(Port {
-            target,
-            published: parts.next().and_then(|part| {
-                if part.is_empty() {
-                    None
-                } else {
-                    Some(part.to_string())
-                }
-            }),
-            host_ip: parts.next().map(ToString::to_string),
-            protocol: container_parts
-                .next()
-                .map_or_else(|| String::from("tcp"), ToString::to_string),
-        })
-    }
-);
+    Ok(Port {
+        target,
+        published: parts.next().and_then(|part| {
+            if part.is_empty() {
+                None
+            } else {
+                Some(part.to_string())
+            }
+        }),
+        host_ip: parts.next().map(ToString::to_string),
+        protocol: container_parts
+            .next()
+            .map_or_else(|| String::from("tcp"), ToString::to_string),
+    })
+}
+
+serde_conv!(PortOrString, Port, ToString::to_string, parse_port);
 
 serde_conv!(
     PortOrU16,
@@ -1614,7 +1607,7 @@ serde_conv!(
         Ok(Port {
             target: target.to_string(),
             protocol: String::from("tcp"),
-            ..Default::default()
+            ..Port::default()
         })
     }
 );
@@ -1651,105 +1644,107 @@ serde_conv!(
     }
 );
 
+pub(crate) fn parse_service_volume(mount: &str) -> Result<ServiceVolume> {
+    let mut r#type = ServiceVolumeType::Volume(None);
+    let target;
+    let mut read_only = None;
+    let mut bind = None;
+    let mut volume = None;
+    let mut options = "";
+    let parts = mount.split(':').collect::<Vec<_>>();
+
+    match parts[..] {
+        [dst] => {
+            target = dst.to_string();
+        }
+        [src, dst] if dst.starts_with('/') => {
+            if src.starts_with('/') || src.starts_with('.') {
+                r#type = ServiceVolumeType::Bind(Path::new(src).absolutize()?.to_path_buf());
+                bind = Some(ServiceVolumeBind {
+                    create_host_path: Some(true),
+                    ..ServiceVolumeBind::default()
+                });
+            } else {
+                r#type = ServiceVolumeType::Volume(Some(src.to_string()));
+            }
+
+            target = dst.to_string();
+        }
+        [dst, opts] => {
+            target = dst.to_string();
+            options = opts;
+        }
+        [src, dst, opts] => {
+            if src.starts_with('/') || src.starts_with('.') {
+                r#type = ServiceVolumeType::Bind(Path::new(src).absolutize()?.to_path_buf());
+                bind = Some(ServiceVolumeBind {
+                    create_host_path: Some(true),
+                    ..ServiceVolumeBind::default()
+                });
+            } else {
+                r#type = ServiceVolumeType::Volume(Some(src.to_string()));
+            }
+
+            target = dst.to_string();
+            options = opts;
+        }
+        _ => {
+            bail!("{mount}: too many colons");
+        }
+    }
+
+    let options = options.split(',');
+    let mut unused = Vec::new();
+
+    for option in options {
+        match option {
+            "rw" | "ro" => {
+                read_only = Some(option == "ro");
+            }
+            "shared" | "rshared" | "slave" | "rslave" | "private" | "rprivate" | "unbindable"
+            | "runbindable" => {
+                bind.get_or_insert_with(ServiceVolumeBind::default)
+                    .propagation = Some(option.to_string());
+            }
+            "z" | "Z" => {
+                bind.get_or_insert_with(ServiceVolumeBind::default).selinux =
+                    Some(option.to_string());
+            }
+            "copy" | "nocopy" => {
+                volume = Some(ServiceVolumeVolume {
+                    nocopy: Some(option == "nocopy"),
+                });
+            }
+            "" => {}
+            _ => {
+                unused.push(option);
+            }
+        }
+    }
+
+    if !unused.is_empty() {
+        eprintln!(
+            "{} Unsupported/unknown mount options: {}",
+            *STYLED_WARNING,
+            unused.join(", ")
+        );
+    }
+
+    Ok(ServiceVolume {
+        r#type,
+        target: PathBuf::from(target),
+        read_only,
+        bind,
+        volume,
+        tmpfs: None,
+    })
+}
+
 serde_conv!(
     ServiceVolumeOrString,
     ServiceVolume,
     ToString::to_string,
-    |mount: String| -> Result<_> {
-        let mut r#type = ServiceVolumeType::Volume(None);
-        let target;
-        let mut read_only = None;
-        let mut bind = None;
-        let mut volume = None;
-        let mut options = "";
-        let parts = mount.split(':').collect::<Vec<_>>();
-
-        match parts[..] {
-            [dst] => {
-                target = dst.to_string();
-            }
-            [src, dst] if dst.starts_with('/') => {
-                if src.starts_with('/') || src.starts_with('.') {
-                    r#type = ServiceVolumeType::Bind(Path::new(src).absolutize()?.to_path_buf());
-                    bind = Some(ServiceVolumeBind {
-                        create_host_path: Some(true),
-                        ..ServiceVolumeBind::default()
-                    });
-                } else {
-                    r#type = ServiceVolumeType::Volume(Some(src.to_string()));
-                }
-
-                target = dst.to_string();
-            }
-            [dst, opts] => {
-                target = dst.to_string();
-                options = opts;
-            }
-            [src, dst, opts] => {
-                if src.starts_with('/') || src.starts_with('.') {
-                    r#type = ServiceVolumeType::Bind(Path::new(src).absolutize()?.to_path_buf());
-                    bind = Some(ServiceVolumeBind {
-                        create_host_path: Some(true),
-                        ..ServiceVolumeBind::default()
-                    });
-                } else {
-                    r#type = ServiceVolumeType::Volume(Some(src.to_string()));
-                }
-
-                target = dst.to_string();
-                options = opts;
-            }
-            _ => {
-                bail!("{mount}: too many colons");
-            }
-        }
-
-        let options = options.split(',');
-        let mut unused = Vec::new();
-
-        for option in options {
-            match option {
-                "rw" | "ro" => {
-                    read_only = Some(option == "ro");
-                }
-                "shared" | "rshared" | "slave" | "rslave" | "private" | "rprivate"
-                | "unbindable" | "runbindable" => {
-                    bind.get_or_insert_with(ServiceVolumeBind::default)
-                        .propagation = Some(option.to_string());
-                }
-                "z" | "Z" => {
-                    bind.get_or_insert_with(ServiceVolumeBind::default).selinux =
-                        Some(option.to_string());
-                }
-                "copy" | "nocopy" => {
-                    volume = Some(ServiceVolumeVolume {
-                        nocopy: Some(option == "nocopy"),
-                    });
-                }
-                "" => {}
-                _ => {
-                    unused.push(option);
-                }
-            }
-        }
-
-        if !unused.is_empty() {
-            eprintln!(
-                "{} Unsupported/unknown mount options: {}",
-                *STYLED_WARNING,
-                unused.join(", ")
-            );
-        }
-
-        Ok(ServiceVolume {
-            r#type,
-            target: PathBuf::from(target),
-            read_only,
-            bind,
-            volume,
-            tmpfs: None,
-        })
-    }
+    parse_service_volume
 );
 
 #[cfg(test)]

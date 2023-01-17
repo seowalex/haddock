@@ -30,7 +30,7 @@ use crate::{
 #[derive(clap::Args, Debug)]
 #[command(next_display_order = None)]
 pub(crate) struct Args {
-    services: Vec<String>,
+    pub(crate) services: Vec<String>,
 
     /// Build images before starting containers
     // #[arg(long, conflicts_with = "no_build")]
@@ -42,23 +42,23 @@ pub(crate) struct Args {
 
     /// Pull image before running
     #[arg(long, value_enum)]
-    pull: Option<PullPolicy>,
+    pub(crate) pull: Option<PullPolicy>,
 
     /// Recreate containers even if their configuration and image haven't changed
     #[arg(long, conflicts_with_all = ["services", "no_recreate"])]
-    force_recreate: bool,
+    pub(crate) force_recreate: bool,
 
     /// If containers already exist, don't recreate them
     #[arg(long)]
-    no_recreate: bool,
+    pub(crate) no_recreate: bool,
 
     /// Remove containers for services not defined in the Compose file
     #[arg(long)]
-    remove_orphans: bool,
+    pub(crate) remove_orphans: bool,
 }
 
 #[derive(ValueEnum, Clone, Debug)]
-enum PullPolicy {
+pub(crate) enum PullPolicy {
     Always,
     Missing,
     Never,
@@ -76,16 +76,17 @@ async fn create_pod(
     config: &Config,
     file: &Compose,
     labels: &[String],
-    name: &str,
 ) -> Result<()> {
+    let name = file.name.as_ref().unwrap();
+
     if podman.force_run(["pod", "exists", name]).await.is_err() {
         let pod_labels = [
             (
-                "project.working_dir",
+                "project.working-dir",
                 config.project_directory.to_string_lossy().as_ref(),
             ),
             (
-                "project.config_files",
+                "project.config-files",
                 &config
                     .files
                     .iter()
@@ -93,7 +94,7 @@ async fn create_pod(
                     .join(","),
             ),
             (
-                "project.environment_file",
+                "project.environment-file",
                 config.env_file.to_string_lossy().as_ref(),
             ),
             ("config-hash", &file.digest()),
@@ -108,7 +109,7 @@ async fn create_pod(
                     .into_iter()
                     .chain(labels.iter().flat_map(|label| ["--label", label]))
                     .chain(pod_labels.iter().flat_map(|label| ["--label", label]))
-                    .chain([name]),
+                    .chain([name.as_ref()]),
             )
             .await?;
     }
@@ -253,9 +254,9 @@ async fn create_containers(
     progress: &Progress,
     file: &Compose,
     labels: &[String],
-    project_name: &str,
     args: Args,
 ) -> Result<()> {
+    let project_name = file.name.as_ref().unwrap();
     let mut dependencies = file
         .services
         .iter()
@@ -359,13 +360,13 @@ async fn create_containers(
                                 .is_err()
                             {
                                 let container_labels = [
+                                    ("oneoff", "false"),
                                     ("service", service_name),
                                     ("container-number", &i.to_string()),
                                 ]
                                 .into_iter()
                                 .map(|label| format!("io.podman.compose.{}={}", label.0, label.1))
                                 .collect::<Vec<_>>();
-                                let (global_args, service_args) = service.to_args();
                                 let pull_policy =
                                     args.pull.as_ref().map(ToString::to_string).or_else(|| {
                                         service.pull_policy.as_ref().and_then(|pull_policy| {
@@ -439,17 +440,20 @@ async fn create_containers(
                                     })
                                     .collect::<Vec<_>>();
 
+                                let (global_args, service_args) = service.to_args();
+
                                 podman
                                     .run(
                                         global_args
                                             .iter()
                                             .map(AsRef::as_ref)
-                                            .chain(["create", "--pod", project_name])
-                                            .chain(if service.container_name.is_none() {
-                                                vec!["--name", &container_name]
-                                            } else {
-                                                vec![]
-                                            })
+                                            .chain([
+                                                "create",
+                                                "--pod",
+                                                project_name,
+                                                "--name",
+                                                &container_name,
+                                            ])
                                             .chain(requirements.iter().flat_map(|requirement| {
                                                 ["--requires", requirement]
                                             }))
@@ -556,7 +560,7 @@ pub(crate) async fn run(
     let progress = Progress::new(config);
 
     try_join!(
-        create_pod(&podman, config, &file, &labels, name),
+        create_pod(&podman, config, &file, &labels),
         create_networks(&podman, &progress, &file, &labels),
         create_volumes(&podman, &progress, &file, &labels),
         create_secrets(&podman, &progress, &file, &labels),
@@ -573,7 +577,7 @@ pub(crate) async fn run(
     {
         let progress = Progress::new(config);
 
-        create_containers(&podman, &progress, &file, &labels, name, args).await?;
+        create_containers(&podman, &progress, &file, &labels, args).await?;
 
         progress.finish();
     }
