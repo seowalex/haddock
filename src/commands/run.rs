@@ -201,6 +201,8 @@ async fn run_container(
                     project_name,
                     "--name",
                     &container_name,
+                    "--network-alias",
+                    &args.service,
                 ])
                 .chain(
                     requirements

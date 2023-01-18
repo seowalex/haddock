@@ -430,6 +430,8 @@ async fn create_containers(
                                                 project_name,
                                                 "--name",
                                                 &container_name,
+                                                "--network-alias",
+                                                service_name,
                                             ])
                                             .chain(requirements.iter().flat_map(|requirement| {
                                                 ["--requires", requirement]
