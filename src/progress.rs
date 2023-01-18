@@ -105,10 +105,6 @@ impl Progress {
     }
 
     pub(crate) fn finish(&self) {
-        for spinner in self.spinners.borrow().iter() {
-            assert!(spinner.inner.is_finished());
-        }
-
         self.header.set_style(HEADER_FINISHED_STYLE.clone());
         self.header.finish();
     }

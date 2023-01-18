@@ -1,6 +1,6 @@
 use anyhow::Result;
 use console::Style;
-use futures::stream::{select_all, TryStreamExt};
+use futures::{stream::select_all, TryStreamExt};
 use itertools::Itertools;
 
 use crate::{

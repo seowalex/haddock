@@ -1,5 +1,5 @@
 use anyhow::Result;
-use futures::stream::TryStreamExt;
+use futures::TryStreamExt;
 use indexmap::IndexSet;
 use itertools::Itertools;
 

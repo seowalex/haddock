@@ -1753,9 +1753,9 @@ serde_conv!(
 mod tests {
     use std::fs;
 
+    use assert_matches::assert_matches;
     use pretty_assertions::assert_eq;
     use test_generator::test_resources;
-    use tokio_test::assert_ok;
 
     use super::*;
 
@@ -1763,7 +1763,7 @@ mod tests {
     fn serde(resource: &str) {
         let contents = fs::read_to_string(resource).unwrap();
 
-        assert_ok!(serde_yaml::from_str::<Compose>(&contents));
+        assert_matches!(serde_yaml::from_str::<Compose>(&contents), Ok(_));
     }
 
     #[test]

@@ -510,10 +510,10 @@ pub(crate) fn parse(config: &Config, no_interpolate: bool) -> Result<Compose> {
 mod tests {
     use std::path::PathBuf;
 
+    use assert_matches::assert_matches;
     use pretty_assertions::assert_eq;
     use serde_yaml::Value;
     use test_generator::test_resources;
-    use tokio_test::assert_ok;
 
     use super::*;
 
@@ -524,7 +524,7 @@ mod tests {
             ..Config::default()
         };
 
-        assert_ok!(super::parse(&config, false));
+        assert_matches!(super::parse(&config, false), Ok(_));
     }
 
     #[test]

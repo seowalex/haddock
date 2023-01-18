@@ -1,11 +1,12 @@
 use anyhow::Result;
 use futures::{stream::FuturesUnordered, TryStreamExt};
 use itertools::Itertools;
+use tokio::{select, signal};
 
 use crate::{
     commands::{
         create::{self, PullPolicy},
-        logs, start,
+        logs, start, stop,
     },
     compose::types::Compose,
     config::Config,
@@ -60,8 +61,8 @@ pub(crate) struct Args {
     no_start: bool,
 
     /// Use this timeout in seconds for container shutdown when attached or when containers are already running
-    // #[arg(short, long, default_value_t = 10)]
-    // timeout: u32,
+    #[arg(short, long, default_value_t = 10)]
+    timeout: u32,
 
     /// Show timestamps
     #[arg(long)]
@@ -187,23 +188,40 @@ pub(crate) async fn run(
 
                 services.retain(|service| !args.no_attach.contains(service));
 
-                eprintln!("Attaching to {}", services.join(", "));
+                eprintln!("Attaching to {}", containers.join(", "));
 
-                logs::run(
-                    logs::Args {
-                        services,
-                        follow: true,
-                        since: None,
-                        until: None,
-                        no_color: args.no_colour,
-                        no_log_prefix: args.no_log_prefix,
-                        timestamps: args.timestamps,
-                        tail: None,
-                    },
-                    podman,
-                    file,
-                )
-                .await?;
+                select! {
+                    biased;
+
+                    _ = signal::ctrl_c() => {
+                        eprintln!("Gracefully stopping... (press Ctrl+C again to force)");
+
+                        stop::run(
+                            stop::Args {
+                                services: Vec::new(),
+                                timeout: args.timeout,
+                            },
+                            podman,
+                            file,
+                            config,
+                        )
+                        .await?;
+                    }
+                    _ = logs::run(
+                        logs::Args {
+                            services,
+                            follow: true,
+                            since: None,
+                            until: None,
+                            no_color: args.no_colour,
+                            no_log_prefix: args.no_log_prefix,
+                            timestamps: args.timestamps,
+                            tail: None,
+                        },
+                        podman,
+                        file,
+                    ) => {}
+                };
             }
         }
     }
