@@ -16,6 +16,7 @@ pub(crate) enum Command {
 
 #[derive(Subcommand, Debug)]
 pub(crate) enum ExtCommand {
+    Up(up::Args),
     Down(down::Args),
     Create(create::Args),
     Rm(rm::Args),
@@ -44,6 +45,7 @@ pub(crate) async fn run(command: Command, config: Config) -> Result<()> {
             let file = compose::parse(&config, false)?;
 
             match command {
+                ExtCommand::Up(args) => up::run(args, &podman, &file, &config).await,
                 ExtCommand::Down(args) => down::run(args, &podman, &file, &config).await,
                 ExtCommand::Create(args) => create::run(args, &podman, &file, &config).await,
                 ExtCommand::Rm(args) => rm::run(args, &podman, &file, &config).await,

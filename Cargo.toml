@@ -40,7 +40,7 @@ serde_with = { version = "2.2.0", features = ["indexmap"] }
 serde_yaml = "0.9.16"
 sha2 = "0.10.6"
 shell-words = "1.1.0"
-tokio = { version = "1.24.1", features = ["full"] }
+tokio = { version = "1.24.2", features = ["full"] }
 tokio-stream = { version = "0.1.11", features = ["io-util", "sync"] }
 
 [dev-dependencies]

@@ -90,10 +90,6 @@ pub(crate) struct Args {
     /// Remove containers for services not defined in the Compose file
     #[arg(long)]
     remove_orphans: bool,
-
-    /// Keep STDIN open even if not attached
-    #[arg(short, long)]
-    interactive: bool,
 }
 
 async fn run_container(
@@ -212,7 +208,14 @@ async fn run_container(
             global_args
                 .iter()
                 .map(AsRef::as_ref)
-                .chain(["run", "--pod", project_name, "--name", &container_name])
+                .chain([
+                    "run",
+                    "--interactive",
+                    "--pod",
+                    project_name,
+                    "--name",
+                    &container_name,
+                ])
                 .chain(
                     requirements
                         .iter()
@@ -234,11 +237,6 @@ async fn run_container(
                 })
                 .chain(if args.rm { vec!["--rm"] } else { vec![] })
                 .chain(if args.no_tty { vec![] } else { vec!["--tty"] })
-                .chain(if args.interactive {
-                    vec!["--interactive"]
-                } else {
-                    vec![]
-                })
                 .chain(service_args.iter().map(AsRef::as_ref)),
         )
         .await

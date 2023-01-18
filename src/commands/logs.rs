@@ -12,35 +12,35 @@ use crate::{
 #[derive(clap::Args, Debug)]
 #[command(next_display_order = None)]
 pub(crate) struct Args {
-    services: Vec<String>,
+    pub(crate) services: Vec<String>,
 
     /// Follow log output
     #[arg(short, long)]
-    follow: bool,
+    pub(crate) follow: bool,
 
     /// Show logs since timestamp (e.g. 2013-01-02T13:23:37Z) or relative (e.g. 42m for 42 minutes)
     #[arg(long)]
-    since: Option<String>,
+    pub(crate) since: Option<String>,
 
     /// Show logs before a timestamp (e.g. 2013-01-02T13:23:37Z) or relative (e.g. 42m for 42 minutes)
     #[arg(long)]
-    until: Option<String>,
+    pub(crate) until: Option<String>,
 
     /// Produce monochrome output
     #[arg(long)]
-    no_color: bool,
+    pub(crate) no_color: bool,
 
     /// Don't print prefix in logs
     #[arg(long)]
-    no_log_prefix: bool,
+    pub(crate) no_log_prefix: bool,
 
     /// Show timestamps
     #[arg(short, long)]
-    timestamps: bool,
+    pub(crate) timestamps: bool,
 
     /// Number of lines to show from the end of the logs for each container
     #[arg(long)]
-    tail: Option<u32>,
+    pub(crate) tail: Option<u32>,
 }
 
 pub(crate) async fn run(args: Args, podman: &Podman, file: &Compose) -> Result<()> {
