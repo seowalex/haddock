@@ -77,8 +77,6 @@ impl Compose {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub(crate) struct Service {
     pub(crate) blkio_config: Option<BlkioConfig>,
-    #[serde_as(as = "Option<PickFirst<(_, BuildConfigOrPathBuf)>>")]
-    pub(crate) build: Option<BuildConfig>,
     pub(crate) cap_add: Vec<String>,
     pub(crate) cap_drop: Vec<String>,
     pub(crate) cgroup_parent: Option<String>,
@@ -116,7 +114,6 @@ pub(crate) struct Service {
     )]
     pub(crate) environment: IndexMap<String, Option<String>>,
     pub(crate) expose: Vec<String>,
-    pub(crate) external_links: Vec<String>,
     #[serde_as(
         as = "PickFirst<(_, IndexMap<DisplayFromAny, DisplayFromAny>, MappingWithColonEmpty)>"
     )]
@@ -131,8 +128,6 @@ pub(crate) struct Service {
         as = "PickFirst<(_, IndexMap<DisplayFromAny, DisplayFromAny>, MappingWithEqualsEmpty)>"
     )]
     pub(crate) labels: IndexMap<String, String>,
-    #[serde_as(as = "LinksVec")]
-    pub(crate) links: IndexMap<String, Option<String>>,
     pub(crate) logging: Option<Logging>,
     pub(crate) mac_address: Option<String>,
     pub(crate) mem_limit: Option<Byte>,
@@ -660,59 +655,6 @@ impl Display for ThrottleDevice {
     }
 }
 
-#[skip_serializing_none]
-#[serde_as]
-#[serde_with::apply(
-    IndexMap => #[serde(skip_serializing_if = "IndexMap::is_empty", default)],
-    IndexSet => #[serde(skip_serializing_if = "IndexSet::is_empty", default)],
-    Vec => #[serde(skip_serializing_if = "Vec::is_empty", default)]
-)]
-#[derive(Serialize, Deserialize, Clone, Default, Debug)]
-pub(crate) struct BuildConfig {
-    #[serde_as(as = "PickFirst<(AbsPathBuf, DisplayFromAny)>")]
-    pub(crate) context: PathBuf,
-    #[serde_as(as = "DisplayFromAny")]
-    #[serde(default = "default_dockerfile")]
-    pub(crate) dockerfile: PathBuf,
-    #[serde_as(
-        as = "PickFirst<(_, IndexMap<DisplayFromAny, Option<DisplayFromAny>>, MappingWithEqualsNull)>"
-    )]
-    pub(crate) args: IndexMap<String, Option<String>>,
-    #[serde_as(
-        as = "PickFirst<(MappingWithEqualsNullSerialiseAsColon, _, IndexMap<DisplayFromAny, Option<DisplayFromAny>>)>"
-    )]
-    pub(crate) ssh: IndexMap<String, Option<String>>,
-    #[serde_as(as = "Vec<DisplayFromAny>")]
-    pub(crate) cache_from: Vec<String>,
-    #[serde_as(as = "Vec<DisplayFromAny>")]
-    pub(crate) cache_to: Vec<String>,
-    #[serde_as(
-        as = "PickFirst<(_, IndexMap<DisplayFromAny, DisplayFromAny>, MappingWithColonEmpty)>"
-    )]
-    pub(crate) extra_hosts: IndexMap<String, String>,
-    #[serde_as(as = "Option<DisplayFromAny>")]
-    pub(crate) isolation: Option<String>,
-    #[serde_as(
-        as = "PickFirst<(_, IndexMap<DisplayFromAny, DisplayFromAny>, MappingWithEqualsEmpty)>"
-    )]
-    pub(crate) labels: IndexMap<String, String>,
-    pub(crate) no_cache: Option<bool>,
-    pub(crate) pull: Option<bool>,
-    pub(crate) shm_size: Option<Byte>,
-    #[serde_as(as = "Option<DisplayFromAny>")]
-    pub(crate) target: Option<String>,
-    #[serde_as(as = "DuplicateInsertsLastWinsSet<PickFirst<(_, FileReferenceOrString)>>")]
-    pub(crate) secrets: IndexSet<FileReference>,
-    #[serde_as(as = "Vec<DisplayFromAny>")]
-    pub(crate) tags: Vec<String>,
-    #[serde_as(as = "Vec<DisplayFromAny>")]
-    pub(crate) platforms: Vec<String>,
-}
-
-fn default_dockerfile() -> PathBuf {
-    PathBuf::from("Dockerfile")
-}
-
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub(crate) struct Dependency {
     pub(crate) condition: Condition,
@@ -923,7 +865,6 @@ pub(crate) enum PullPolicy {
     Always,
     Never,
     Missing,
-    Build,
     Newer,
 }
 
@@ -1314,22 +1255,6 @@ serde_conv!(
 );
 
 serde_conv!(
-    BuildConfigOrPathBuf,
-    BuildConfig,
-    |build: &BuildConfig| build.context.clone(),
-    |context: PathBuf| -> Result<_> {
-        context
-            .absolutize()
-            .map_err(Error::from)
-            .map(|context| BuildConfig {
-                context: context.to_path_buf(),
-                dockerfile: PathBuf::from("Dockerfile"),
-                ..BuildConfig::default()
-            })
-    }
-);
-
-serde_conv!(
     CommandOrString,
     Vec<String>,
     shell_words::join,
@@ -1395,35 +1320,6 @@ serde_conv!(
 );
 
 serde_conv!(
-    LinksVec,
-    IndexMap<String, Option<String>>,
-    |links: &IndexMap<String, Option<String>>| {
-        links
-            .into_iter()
-            .map(|(service, alias)| {
-                if let Some(alias) = alias {
-                    format!("{service}:{alias}")
-                } else {
-                    service.clone()
-                }
-            })
-            .collect::<Vec<_>>()
-    },
-    |links: Vec<String>| -> Result<_, Infallible> {
-        Ok(links
-            .into_iter()
-            .map(|link| {
-                let mut parts = link.split(':');
-                (
-                    parts.next().unwrap().to_string(),
-                    parts.next().map(ToString::to_string),
-                )
-            })
-            .collect::<IndexMap<_, _>>())
-    }
-);
-
-serde_conv!(
     MappingWithColonEmpty,
     IndexMap<String, String>,
     |variables: &IndexMap<String, String>| {
@@ -1446,32 +1342,6 @@ serde_conv!(
                 (
                     parts.next().unwrap().to_string(),
                     parts.next().map(ToString::to_string).unwrap_or_default(),
-                )
-            })
-            .collect::<IndexMap<_, _>>())
-    }
-);
-
-serde_conv!(
-    MappingWithEqualsNullSerialiseAsColon,
-    IndexMap<String, Option<String>>,
-    |variables: &IndexMap<String, Option<String>>| {
-        variables
-            .iter()
-            .map(|(key, value)| match value {
-                Some(value) => format!("{key}: {value}"),
-                None => key.clone(),
-            })
-            .collect::<Vec<_>>()
-    },
-    |variables: Vec<String>| -> Result<_, Infallible> {
-        Ok(variables
-            .into_iter()
-            .map(|variable| {
-                let mut parts = variable.split('=');
-                (
-                    parts.next().unwrap().to_string(),
-                    parts.next().map(ToString::to_string),
                 )
             })
             .collect::<IndexMap<_, _>>())

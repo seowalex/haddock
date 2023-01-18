@@ -40,7 +40,6 @@ async fn restart_containers(
             service
                 .depends_on
                 .keys()
-                .chain(service.links.keys())
                 .filter(|service| containers.keys().contains(service))
                 .map(move |from| (from, to, ()))
         })

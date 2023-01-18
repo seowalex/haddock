@@ -33,7 +33,6 @@ pub(crate) enum ExtCommand {
     Logs(logs::Args),
     Ps(ps::Args),
     Top(top::Args),
-    Images(images::Args),
     Port(port::Args),
     Ls(ls::Args),
 }
@@ -62,7 +61,6 @@ pub(crate) async fn run(command: Command, config: Config) -> Result<()> {
                 ExtCommand::Logs(args) => logs::run(args, &podman, &file).await,
                 ExtCommand::Ps(args) => ps::run(args, &podman, &file).await,
                 ExtCommand::Top(args) => top::run(args, &podman, &file).await,
-                ExtCommand::Images(args) => images::run(args, &podman, &file).await,
                 ExtCommand::Port(args) => port::run(args, &podman, &file).await,
                 ExtCommand::Ls(args) => ls::run(args, &podman).await,
             }?

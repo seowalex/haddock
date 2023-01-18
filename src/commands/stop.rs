@@ -40,7 +40,6 @@ pub(crate) async fn stop_containers(
             service
                 .depends_on
                 .keys()
-                .chain(service.links.keys())
                 .filter(|service| containers.keys().contains(service))
                 .map(move |to| (from, to, ()))
         })

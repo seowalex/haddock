@@ -7,12 +7,9 @@ use fastrand::Rng;
 
 use crate::{
     commands::{create, start},
-    compose::{
-        self,
-        types::{
-            parse_port, parse_service_volume, Compose, FileReference, Port, Service, ServiceVolume,
-            ServiceVolumeType,
-        },
+    compose::types::{
+        parse_port, parse_service_volume, Compose, FileReference, Port, Service, ServiceVolume,
+        ServiceVolumeType,
     },
     config::Config,
     podman::Podman,
@@ -83,10 +80,6 @@ pub(crate) struct Args {
     #[arg(long, conflicts_with = "publish")]
     service_ports: bool,
 
-    /// Build image before starting container
-    // #[arg(long)]
-    // build: bool,
-
     /// Remove containers for services not defined in the Compose file
     #[arg(long)]
     remove_orphans: bool,
@@ -109,7 +102,6 @@ async fn run_container(
         service
             .depends_on
             .keys()
-            .chain(service.links.keys())
             .filter_map(|service_name| {
                 file.services.get(service_name).map(|service| {
                     (1..=service
@@ -139,13 +131,7 @@ async fn run_container(
     .into_iter()
     .map(|label| format!("io.podman.compose.{}={}", label.0, label.1))
     .collect::<Vec<_>>();
-    let pull_policy = service.pull_policy.as_ref().and_then(|pull_policy| {
-        if *pull_policy == compose::types::PullPolicy::Build {
-            None
-        } else {
-            Some(pull_policy.to_string())
-        }
-    });
+    let pull_policy = service.pull_policy.as_ref().map(ToString::to_string);
 
     let networks = service
         .networks
@@ -252,12 +238,7 @@ pub(crate) async fn run(
         .services
         .get(&args.service)
         .ok_or_else(|| anyhow!("No such service: \"{}\"", args.service))?;
-    let services = service
-        .depends_on
-        .keys()
-        .chain(service.links.keys())
-        .cloned()
-        .collect::<Vec<_>>();
+    let services = service.depends_on.keys().cloned().collect::<Vec<_>>();
 
     if !args.no_deps {
         create::run(

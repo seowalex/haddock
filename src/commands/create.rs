@@ -16,10 +16,7 @@ use tokio_stream::wrappers::BroadcastStream;
 
 use crate::{
     commands::down,
-    compose::{
-        self,
-        types::{Compose, FileReference, ServiceVolume, ServiceVolumeType},
-    },
+    compose::types::{Compose, FileReference, ServiceVolume, ServiceVolumeType},
     config::Config,
     podman::{types::Pod, Podman},
     progress::{Finish, Progress},
@@ -31,14 +28,6 @@ use crate::{
 #[command(next_display_order = None)]
 pub(crate) struct Args {
     pub(crate) services: Vec<String>,
-
-    /// Build images before starting containers
-    // #[arg(long, conflicts_with = "no_build")]
-    // build: bool,
-
-    /// Don't build an image, even if it's missing
-    // #[arg(long, conflicts_with = "build")]
-    // no_build: bool,
 
     /// Pull image before running
     #[arg(long, value_enum)]
@@ -260,13 +249,7 @@ async fn create_containers(
     let mut dependencies = file
         .services
         .iter()
-        .flat_map(|(to, service)| {
-            service
-                .depends_on
-                .keys()
-                .chain(service.links.keys())
-                .map(move |from| (from, to, ()))
-        })
+        .flat_map(|(to, service)| service.depends_on.keys().map(move |from| (from, to, ())))
         .collect::<DiGraphMap<_, _>>();
 
     for service in file.services.keys() {
@@ -369,13 +352,7 @@ async fn create_containers(
                                 .collect::<Vec<_>>();
                                 let pull_policy =
                                     args.pull.as_ref().map(ToString::to_string).or_else(|| {
-                                        service.pull_policy.as_ref().and_then(|pull_policy| {
-                                            if *pull_policy == compose::types::PullPolicy::Build {
-                                                None
-                                            } else {
-                                                Some(pull_policy.to_string())
-                                            }
-                                        })
+                                        service.pull_policy.as_ref().map(ToString::to_string)
                                     });
 
                                 let networks = service

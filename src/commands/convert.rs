@@ -75,11 +75,9 @@ pub(crate) fn run(args: Args, config: &Config) -> Result<()> {
                 println!("{profile}");
             }
         } else if args.images {
-            for (name, service) in file.services {
+            for service in file.services.into_values() {
                 if let Some(image) = service.image {
                     println!("{image}");
-                } else {
-                    println!("{}-{name}", file.name.as_ref().unwrap());
                 }
             }
         } else {

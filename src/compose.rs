@@ -9,7 +9,6 @@ use std::{
 use anyhow::{anyhow, bail, Context, Error, Result};
 use indexmap::IndexSet;
 use itertools::Itertools;
-use path_absolutize::Absolutize;
 use petgraph::{algo::tarjan_scc, graphmap::DiGraphMap};
 use serde_yaml::Value;
 
@@ -244,30 +243,29 @@ pub(crate) fn parse(config: &Config, no_interpolate: bool) -> Result<Compose> {
         false
     });
 
-    let mut all_networks = IndexSet::new();
-    let mut all_volumes = IndexSet::new();
-    let mut all_secrets = IndexSet::new();
-
-    for service in combined_file.services.values_mut() {
-        if let Some(build) = &mut service.build {
-            build.dockerfile = build
-                .dockerfile
-                .absolutize_from(&build.context)?
-                .to_path_buf();
-        }
-
-        all_networks.extend(service.networks.keys());
-        all_volumes.extend(
+    let all_networks = combined_file
+        .services
+        .values()
+        .flat_map(|service| service.networks.keys())
+        .collect::<IndexSet<_>>();
+    let all_volumes = combined_file
+        .services
+        .values()
+        .flat_map(|service| {
             service
                 .volumes
                 .iter()
                 .filter_map(|volume| match &volume.r#type {
                     ServiceVolumeType::Volume(source) => source.as_ref(),
                     _ => None,
-                }),
-        );
-        all_secrets.extend(service.secrets.iter().map(|secret| &secret.source));
-    }
+                })
+        })
+        .collect::<IndexSet<_>>();
+    let all_secrets = combined_file
+        .services
+        .values()
+        .flat_map(|service| service.secrets.iter().map(|secret| &secret.source))
+        .collect::<IndexSet<_>>();
 
     combined_file
         .networks
@@ -359,8 +357,8 @@ pub(crate) fn parse(config: &Config, no_interpolate: bool) -> Result<Compose> {
             );
         }
 
-        if service.build.is_none() && service.image.is_none() {
-            bail!("Service \"{name}\" has neither an image nor a build context specified");
+        if service.image.is_none() {
+            bail!("Service \"{name}\" does not have an image specified");
         }
 
         if service.network_mode.as_deref().unwrap_or_default() == "host"
@@ -389,17 +387,7 @@ pub(crate) fn parse(config: &Config, no_interpolate: bool) -> Result<Compose> {
             }
         }
 
-        if let Some(build) = &service.build {
-            for label in build.labels.keys() {
-                if label.starts_with("io.podman.compose") {
-                    bail!(
-                        "Service \"name\" cannot have labels starting with \"io.podman.compose\""
-                    );
-                }
-            }
-        }
-
-        for dependency in service.depends_on.keys().chain(service.links.keys()) {
+        for dependency in service.depends_on.keys() {
             if !combined_file.services.contains_key(dependency) {
                 bail!("Service \"{name}\" depends on undefined service \"{dependency}\"");
             }
@@ -480,13 +468,7 @@ pub(crate) fn parse(config: &Config, no_interpolate: bool) -> Result<Compose> {
     let dependencies = combined_file
         .services
         .iter()
-        .flat_map(|(to, service)| {
-            service
-                .depends_on
-                .keys()
-                .chain(service.links.keys())
-                .map(move |from| (from, to, ()))
-        })
+        .flat_map(|(to, service)| service.depends_on.keys().map(move |from| (from, to, ())))
         .collect::<DiGraphMap<_, _>>();
     let cycles = tarjan_scc(&dependencies)
         .into_iter()

@@ -27,13 +27,7 @@ async fn start_containers(
     let mut dependencies = file
         .services
         .iter()
-        .flat_map(|(to, service)| {
-            service
-                .depends_on
-                .keys()
-                .chain(service.links.keys())
-                .map(move |from| (from, to, ()))
-        })
+        .flat_map(|(to, service)| service.depends_on.keys().map(move |from| (from, to, ())))
         .collect::<DiGraphMap<_, _>>();
 
     for service in file.services.keys() {

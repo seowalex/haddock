@@ -9,8 +9,6 @@ with_prefix!(prefix_io_podman_compose "io.podman.compose.");
 #[serde(rename_all = "PascalCase")]
 pub(crate) struct Container {
     pub(crate) id: String,
-    #[serde(rename = "ImageID")]
-    pub(crate) image_id: String,
     #[serde(with = "prefix_io_podman_compose")]
     pub(crate) labels: Option<ContainerLabels>,
     pub(crate) names: VecDeque<String>,

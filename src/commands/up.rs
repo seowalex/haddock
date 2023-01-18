@@ -26,14 +26,6 @@ pub(crate) struct Args {
     #[arg(short, long, conflicts_with_all = ["attach", "attach_dependencies"])]
     detach: bool,
 
-    /// Build images before starting containers
-    // #[arg(long, conflicts_with = "no_build")]
-    // build: bool,
-
-    /// Don't build an image, even if it's missing
-    // #[arg(long, conflicts_with = "build")]
-    // no_build: bool,
-
     /// Pull image before running
     #[arg(long, value_enum)]
     pull: Option<PullPolicy>,

@@ -27,7 +27,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `logs` command.
 - `ps` command.
 - `top` command.
-- `images` command.
 - `port` command.
 - `ls` command.
 - `convert` command.
