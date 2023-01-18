@@ -163,61 +163,63 @@ pub(crate) async fn run(
                 })
                 .collect::<Vec<_>>();
 
-            if args.wait {
-                let progress = Progress::new(config);
+            if !containers.is_empty() {
+                if args.wait {
+                    let progress = Progress::new(config);
 
-                wait_containers(podman, &progress, &containers).await?;
+                    wait_containers(podman, &progress, &containers).await?;
 
-                progress.finish();
-            } else {
-                let mut services = if args.attach_dependencies {
-                    file.services.keys().cloned().collect()
-                } else if !args.attach.is_empty() {
-                    args.attach
-                } else if !args.services.is_empty() {
-                    args.services
+                    progress.finish();
                 } else {
-                    file.services.keys().cloned().collect()
-                };
+                    let mut services = if args.attach_dependencies {
+                        file.services.keys().cloned().collect()
+                    } else if !args.attach.is_empty() {
+                        args.attach
+                    } else if !args.services.is_empty() {
+                        args.services
+                    } else {
+                        file.services.keys().cloned().collect()
+                    };
 
-                services.retain(|service| !args.no_attach.contains(service));
+                    services.retain(|service| !args.no_attach.contains(service));
 
-                eprintln!("Attaching to {}", containers.join(", "));
+                    eprintln!("Attaching to {}", containers.join(", "));
 
-                select! {
-                    biased;
+                    select! {
+                        biased;
 
-                    _ = signal::ctrl_c() => {
-                        eprintln!("Gracefully stopping... (press Ctrl+C again to force)");
+                        _ = signal::ctrl_c() => {
+                            eprintln!("Gracefully stopping... (press Ctrl+C again to force)");
 
-                        stop::run(
-                            stop::Args {
-                                services: Vec::new(),
-                                timeout: args.timeout,
+                            stop::run(
+                                stop::Args {
+                                    services: Vec::new(),
+                                    timeout: args.timeout,
+                                },
+                                podman,
+                                file,
+                                config,
+                            )
+                            .await?;
+
+                            process::exit(130);
+                        }
+                        _ = logs::run(
+                            logs::Args {
+                                services,
+                                follow: true,
+                                since: None,
+                                until: None,
+                                no_color: args.no_colour,
+                                no_log_prefix: args.no_log_prefix,
+                                timestamps: args.timestamps,
+                                tail: Some(0),
                             },
                             podman,
                             file,
-                            config,
-                        )
-                        .await?;
-
-                        process::exit(130);
-                    }
-                    _ = logs::run(
-                        logs::Args {
-                            services,
-                            follow: true,
-                            since: None,
-                            until: None,
-                            no_color: args.no_colour,
-                            no_log_prefix: args.no_log_prefix,
-                            timestamps: args.timestamps,
-                            tail: Some(0),
-                        },
-                        podman,
-                        file,
-                    ) => {}
-                };
+                        ) => {}
+                    };
+                }
             }
         }
     }

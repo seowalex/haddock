@@ -385,8 +385,10 @@ impl Service {
         }
 
         if !self.entrypoint.is_empty() {
-            args.push(String::from("--entrypoint"));
-            args.extend(self.entrypoint.clone());
+            args.extend([
+                String::from("--entrypoint"),
+                shell_words::join(self.entrypoint.clone()),
+            ]);
         }
 
         for env_file in &self.env_file {
@@ -421,8 +423,10 @@ impl Service {
 
         if let Some(healthcheck) = &self.healthcheck {
             if !healthcheck.test.is_empty() {
-                args.push(String::from("--health-cmd"));
-                args.extend(healthcheck.test.clone());
+                args.extend([
+                    String::from("--health-cmd"),
+                    shell_words::join(healthcheck.test.clone()),
+                ]);
             }
 
             if let Some(interval) = healthcheck.interval {
