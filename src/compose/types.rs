@@ -387,7 +387,7 @@ impl Service {
         if !self.entrypoint.is_empty() {
             args.extend([
                 String::from("--entrypoint"),
-                shell_words::join(self.entrypoint.clone()),
+                serde_json::to_string(&self.entrypoint).unwrap(),
             ]);
         }
 
@@ -425,7 +425,7 @@ impl Service {
             if !healthcheck.test.is_empty() {
                 args.extend([
                     String::from("--health-cmd"),
-                    shell_words::join(healthcheck.test.clone()),
+                    serde_json::to_string(&healthcheck.test).unwrap(),
                 ]);
             }
 
