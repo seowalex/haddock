@@ -171,7 +171,7 @@ impl Podman {
             let status = self.command(args).spawn()?.wait().await?;
 
             if !status.success() {
-                process::exit(status.code().unwrap_or(1))
+                process::exit(status.code().unwrap_or(1));
             }
 
             Ok(())

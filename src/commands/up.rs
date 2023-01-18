@@ -1,3 +1,5 @@
+use std::process;
+
 use anyhow::Result;
 use futures::{stream::FuturesUnordered, TryStreamExt};
 use itertools::Itertools;
@@ -206,6 +208,8 @@ pub(crate) async fn run(
                             config,
                         )
                         .await?;
+
+                        process::exit(130);
                     }
                     _ = logs::run(
                         logs::Args {
@@ -216,7 +220,7 @@ pub(crate) async fn run(
                             no_color: args.no_colour,
                             no_log_prefix: args.no_log_prefix,
                             timestamps: args.timestamps,
-                            tail: None,
+                            tail: Some(0),
                         },
                         podman,
                         file,
