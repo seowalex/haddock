@@ -63,7 +63,7 @@ pub(crate) async fn run(command: Command, config: Config) -> Result<()> {
                 ExtCommand::Top(args) => top::run(args, &podman, &file).await,
                 ExtCommand::Port(args) => port::run(args, &podman, &file).await,
                 ExtCommand::Ls(args) => ls::run(args, &podman).await,
-            }?
+            }?;
         }
         Command::Convert(args) => convert::run(args, &config)?,
         Command::Version(args) => version::run(args),

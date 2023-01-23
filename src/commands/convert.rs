@@ -75,10 +75,12 @@ pub(crate) fn run(args: Args, config: &Config) -> Result<()> {
                 println!("{profile}");
             }
         } else if args.images {
-            for service in file.services.into_values() {
-                if let Some(image) = service.image {
-                    println!("{image}");
-                }
+            for image in file
+                .services
+                .into_values()
+                .filter_map(|service| service.image)
+            {
+                println!("{image}");
             }
         } else {
             let mut contents;

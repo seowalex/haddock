@@ -121,15 +121,13 @@ pub(crate) async fn run(args: Args, podman: &Podman, file: &Compose) -> Result<(
 
                             let style = if args.no_color {
                                 Style::new()
+                            } else if i < colours.len() {
+                                Style::from_dotted_str(colours[i])
                             } else {
-                                if i < colours.len() {
-                                    Style::from_dotted_str(colours[i])
-                                } else {
-                                    Style::from_dotted_str(&format!(
-                                        "{}.bright",
-                                        colours[i - colours.len()]
-                                    ))
-                                }
+                                Style::from_dotted_str(&format!(
+                                    "{}.bright",
+                                    colours[i - colours.len()]
+                                ))
                             };
 
                             stream.map_ok(move |line| {

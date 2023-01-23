@@ -529,8 +529,8 @@ pub(crate) async fn run(
                 volumes: true,
                 rmi: false,
             },
-            &podman,
-            &file,
+            podman,
+            file,
             config,
         )
         .await?;
@@ -539,10 +539,10 @@ pub(crate) async fn run(
     let progress = Progress::new(config);
 
     try_join!(
-        create_pod(&podman, config, &file, &labels),
-        create_networks(&podman, &progress, &file, &labels),
-        create_volumes(&podman, &progress, &file, &labels),
-        create_secrets(&podman, &progress, &file, &labels),
+        create_pod(podman, config, file, &labels),
+        create_networks(podman, &progress, file, &labels),
+        create_volumes(podman, &progress, file, &labels),
+        create_secrets(podman, &progress, file, &labels),
     )?;
 
     progress.finish();
@@ -556,7 +556,7 @@ pub(crate) async fn run(
     {
         let progress = Progress::new(config);
 
-        create_containers(&podman, &progress, &file, &labels, args).await?;
+        create_containers(podman, &progress, file, &labels, args).await?;
 
         progress.finish();
     }

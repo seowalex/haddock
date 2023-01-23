@@ -284,10 +284,8 @@ pub(crate) async fn run(
     };
 
     if !args.use_aliases {
-        for network in service.networks.values_mut() {
-            if let Some(network) = network {
-                network.aliases.clear();
-            }
+        for network in service.networks.values_mut().flatten() {
+            network.aliases.clear();
         }
     }
 
