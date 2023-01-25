@@ -13,7 +13,7 @@ anyhow = "1.0.68"
 atty = "0.2.14"
 automod = "1.0.6"
 byte-unit = { version = "4.0.18", default-features = false, features = ["serde", "std"] }
-clap = { version = "4.1.2", features = ["cargo", "derive"] }
+clap = { version = "4.1.4", features = ["cargo", "derive"] }
 console = "0.15.5"
 dotenvy = "0.15.6"
 fastrand = "1.8.0"

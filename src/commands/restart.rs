@@ -20,9 +20,9 @@ use crate::{
 pub(crate) struct Args {
     services: Vec<String>,
 
-    /// Specify a shutdown timeout in seconds
-    #[arg(short, long, default_value_t = 10)]
-    timeout: u32,
+    /// Specify a shutdown timeout in seconds [default: 10]
+    #[arg(short, long)]
+    timeout: Option<u32>,
 }
 
 async fn restart_containers(
@@ -77,7 +77,20 @@ async fn restart_containers(
                     }
 
                     podman
-                        .run(["restart", "--time", &args.timeout.to_string(), container])
+                        .run(
+                            ["restart"]
+                                .into_iter()
+                                .chain(
+                                    if let Some(timeout) =
+                                        &args.timeout.map(|timeout| timeout.to_string())
+                                    {
+                                        vec!["--time", timeout]
+                                    } else {
+                                        vec![]
+                                    },
+                                )
+                                .chain([container.as_ref()]),
+                        )
                         .await
                         .finish_with_message(spinner, "Restarted")
                 })

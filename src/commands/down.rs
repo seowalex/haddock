@@ -24,9 +24,9 @@ pub(crate) struct Args {
     #[arg(long)]
     pub(crate) remove_orphans: bool,
 
-    /// Specify a shutdown timeout in seconds
-    #[arg(short, long, default_value_t = 10)]
-    pub(crate) timeout: u32,
+    /// Specify a shutdown timeout in seconds [default: 10]
+    #[arg(short, long)]
+    pub(crate) timeout: Option<u32>,
 
     /// Remove named volumes declared in the `volumes` section of the Compose file and anonymous volumes attached to containers
     #[arg(short, long)]

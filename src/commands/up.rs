@@ -54,9 +54,9 @@ pub(crate) struct Args {
     #[arg(long)]
     no_start: bool,
 
-    /// Use this timeout in seconds for container shutdown when attached or when containers are already running
-    #[arg(short, long, default_value_t = 10)]
-    timeout: u32,
+    /// Use this timeout in seconds for container shutdown when attached or when containers are already running [default: 10]
+    #[arg(short, long)]
+    timeout: Option<u32>,
 
     /// Show timestamps
     #[arg(long)]
