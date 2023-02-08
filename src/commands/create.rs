@@ -525,7 +525,7 @@ pub(crate) async fn run(
         down::run(
             down::Args {
                 remove_orphans: args.remove_orphans,
-                timeout: 10,
+                timeout: None,
                 volumes: true,
                 rmi: false,
             },
