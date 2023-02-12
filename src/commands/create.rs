@@ -2,6 +2,7 @@ use std::{
     collections::VecDeque,
     env,
     fmt::{self, Display, Formatter},
+    fs,
 };
 
 use anyhow::{bail, Result};
@@ -342,6 +343,18 @@ async fn create_containers(
                                 .await
                                 .is_err()
                             {
+                                for volume in service.volumes.iter().filter(|volume| {
+                                    volume
+                                        .bind
+                                        .as_ref()
+                                        .and_then(|bind| bind.create_host_path)
+                                        .unwrap_or_default()
+                                }) {
+                                    if let ServiceVolumeType::Bind(source) = &volume.r#type {
+                                        fs::create_dir_all(source)?;
+                                    }
+                                }
+
                                 let container_labels = [
                                     ("oneoff", "false"),
                                     ("service", service_name),
