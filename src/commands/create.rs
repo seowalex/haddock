@@ -351,7 +351,7 @@ async fn create_containers(
                                         .unwrap_or_default()
                                 }) {
                                     if let ServiceVolumeType::Bind(source) = &volume.r#type {
-                                        fs::create_dir_all(source)?;
+                                        fs::create_dir_all(source).ok();
                                     }
                                 }
 
