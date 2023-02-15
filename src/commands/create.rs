@@ -241,6 +241,7 @@ async fn create_secrets(
 
 async fn create_containers(
     podman: &Podman,
+    config: &Config,
     progress: &Progress,
     file: &Compose,
     labels: &[String],
@@ -343,15 +344,17 @@ async fn create_containers(
                                 .await
                                 .is_err()
                             {
-                                for volume in service.volumes.iter().filter(|volume| {
-                                    volume
-                                        .bind
-                                        .as_ref()
-                                        .and_then(|bind| bind.create_host_path)
-                                        .unwrap_or_default()
-                                }) {
-                                    if let ServiceVolumeType::Bind(source) = &volume.r#type {
-                                        fs::create_dir_all(source).ok();
+                                if !config.dry_run {
+                                    for volume in service.volumes.iter().filter(|volume| {
+                                        volume
+                                            .bind
+                                            .as_ref()
+                                            .and_then(|bind| bind.create_host_path)
+                                            .unwrap_or_default()
+                                    }) {
+                                        if let ServiceVolumeType::Bind(source) = &volume.r#type {
+                                            fs::create_dir_all(source).ok();
+                                        }
                                     }
                                 }
 
@@ -569,7 +572,7 @@ pub(crate) async fn run(
     {
         let progress = Progress::new(config);
 
-        create_containers(podman, &progress, file, &labels, args).await?;
+        create_containers(podman, config, &progress, file, &labels, args).await?;
 
         progress.finish();
     }
