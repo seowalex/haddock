@@ -595,7 +595,7 @@ mod tests {
 
     #[test]
     fn default_pattern_no_empty() {
-        let result = temp_env::with_vars(vec![("VAR", Some("")), ("DEF", Some("woop"))], || {
+        let result = temp_env::with_vars([("VAR", Some("")), ("DEF", Some("woop"))], || {
             interpolate(&Value::String(String::from("${VAR:-$DEF}")))
         });
 
