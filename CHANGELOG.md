@@ -7,15 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.6] - 2023-02-15
 
+### Fixed
+
 - Do not create directories with `--dry-run`.
 
 ## [0.1.5] - 2023-02-12
+
+### Fixed
 
 - Do not fail if bind mount directory cannot be created.
 
 ## [0.1.4] - 2023-02-12
 
+### Added
+
 - Ensure that bind mounts that do not exist are created.
+
+### Fixed
+
 - Make `stop_grace_period` work.
 
 ## [0.1.3] - 2023-01-18

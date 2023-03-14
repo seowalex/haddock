@@ -15,11 +15,11 @@ use path_absolutize::Absolutize;
 use serde::{Deserialize, Serialize};
 use serde_with::{
     formats::PreferMany, serde_as, serde_conv, skip_serializing_none, DefaultOnNull,
-    DisplayFromStr, DurationMicroSeconds, OneOrMany, PickFirst,
+    DisplayFromStr, DurationMicroSeconds, OneOrMany, PickFirst, SetLastValueWins,
 };
 use serde_yaml::Value;
 
-use crate::utils::{DisplayFromAny, DuplicateInsertsLastWinsSet, STYLED_WARNING};
+use crate::utils::{DisplayFromAny, STYLED_WARNING};
 
 #[skip_serializing_none]
 #[serde_as]
@@ -98,7 +98,7 @@ pub(crate) struct Service {
     pub(crate) depends_on: IndexMap<String, Dependency>,
     pub(crate) deploy: Option<DeployConfig>,
     pub(crate) device_cgroup_rules: Vec<String>,
-    #[serde_as(as = "DuplicateInsertsLastWinsSet<DeviceOrString>")]
+    #[serde_as(as = "SetLastValueWins<DeviceOrString>")]
     pub(crate) devices: IndexSet<Device>,
     #[serde_as(as = "OneOrMany<_, PreferMany>")]
     pub(crate) dns: Vec<String>,
@@ -153,7 +153,7 @@ pub(crate) struct Service {
     pub(crate) restart: Option<RestartPolicy>,
     pub(crate) runtime: Option<String>,
     pub(crate) scale: Option<u32>,
-    #[serde_as(as = "DuplicateInsertsLastWinsSet<PickFirst<(_, FileReferenceOrString)>>")]
+    #[serde_as(as = "SetLastValueWins<PickFirst<(_, FileReferenceOrString)>>")]
     pub(crate) secrets: IndexSet<FileReference>,
     #[serde_as(as = "SecurityOptVec")]
     pub(crate) security_opt: Vec<(String, Option<String>)>,
@@ -173,7 +173,7 @@ pub(crate) struct Service {
     pub(crate) ulimits: IndexMap<String, ResourceLimit>,
     pub(crate) user: Option<String>,
     pub(crate) userns_mode: Option<String>,
-    #[serde_as(as = "DuplicateInsertsLastWinsSet<PickFirst<(_, ServiceVolumeOrString)>>")]
+    #[serde_as(as = "SetLastValueWins<PickFirst<(_, ServiceVolumeOrString)>>")]
     pub(crate) volumes: IndexSet<ServiceVolume>,
     pub(crate) volumes_from: Vec<String>,
     pub(crate) working_dir: Option<PathBuf>,

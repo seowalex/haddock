@@ -2,22 +2,18 @@ use std::{
     env,
     error::Error,
     fmt::{self, Formatter},
-    hash::Hash,
     marker::PhantomData,
     str::FromStr,
 };
 
 use anyhow::{anyhow, Result};
 use console::{style, StyledObject};
-use indexmap::IndexSet;
 use once_cell::sync::Lazy;
 use serde::{
-    de::{self, SeqAccess, Visitor},
+    de::{self, Visitor},
     Deserializer, Serialize, Serializer,
 };
-use serde_with::{
-    de::DeserializeAsWrap, formats::Separator, ser::SerializeAsWrap, DeserializeAs, SerializeAs,
-};
+use serde_with::{formats::Separator, DeserializeAs, SerializeAs};
 use sha2::{Digest as _, Sha256};
 
 pub(crate) static STYLED_WARNING: Lazy<StyledObject<&str>> =
@@ -165,64 +161,6 @@ where
         S: Serializer,
     {
         source.serialize(serializer)
-    }
-}
-
-pub(crate) struct DuplicateInsertsLastWinsSet<T>(PhantomData<T>);
-
-impl<'de, T, U> DeserializeAs<'de, IndexSet<T>> for DuplicateInsertsLastWinsSet<U>
-where
-    T: Eq + Hash,
-    U: DeserializeAs<'de, T>,
-{
-    fn deserialize_as<D>(deserializer: D) -> Result<IndexSet<T>, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        struct SeqVisitor<T, U>(PhantomData<(T, U)>);
-
-        impl<'de, T, U> Visitor<'de> for SeqVisitor<T, U>
-        where
-            T: Eq + Hash,
-            U: DeserializeAs<'de, T>,
-        {
-            type Value = IndexSet<T>;
-
-            fn expecting(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-                formatter.write_str("a sequence")
-            }
-
-            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
-            where
-                A: SeqAccess<'de>,
-            {
-                let mut values = Self::Value::with_capacity(seq.size_hint().unwrap_or(0).min(4096));
-
-                while let Some(value) = seq
-                    .next_element()?
-                    .map(DeserializeAsWrap::<T, U>::into_inner)
-                {
-                    values.replace(value);
-                }
-
-                Ok(values)
-            }
-        }
-
-        deserializer.deserialize_seq(SeqVisitor::<T, U>(PhantomData))
-    }
-}
-
-impl<T, U> SerializeAs<IndexSet<T>> for DuplicateInsertsLastWinsSet<U>
-where
-    T: Eq + Hash,
-    U: SerializeAs<T>,
-{
-    fn serialize_as<S>(source: &IndexSet<T>, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        serializer.collect_seq(source.iter().map(|item| SerializeAsWrap::<T, U>::new(item)))
     }
 }
 
