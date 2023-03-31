@@ -704,7 +704,7 @@ pub(crate) struct Resource {
 pub(crate) struct Device {
     #[serde_as(as = "AbsPathBuf")]
     pub(crate) source: PathBuf,
-    pub(crate) target: PathBuf,
+    pub(crate) target: Option<PathBuf>,
     pub(crate) permissions: Option<String>,
 }
 
@@ -724,16 +724,17 @@ impl Hash for Device {
 
 impl Display for Device {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        if let Some(permissions) = &self.permissions {
-            write!(
-                f,
-                "{}:{}:{permissions}",
-                self.source.display(),
-                self.target.display()
-            )
-        } else {
-            write!(f, "{}:{}", self.source.display(), self.target.display())
+        let mut device = vec![self.source.to_string_lossy().to_string()];
+
+        if let Some(target) = &self.target {
+            device.push(target.to_string_lossy().to_string());
         }
+
+        if let Some(permissions) = &self.permissions {
+            device.push(permissions.clone());
+        }
+
+        write!(f, "{}", device.join(":"))
     }
 }
 
@@ -1295,10 +1296,7 @@ serde_conv!(
 
         Ok(Device {
             source: Path::new(parts.next().unwrap()).absolutize()?.to_path_buf(),
-            target: parts
-                .next()
-                .map(PathBuf::from)
-                .ok_or_else(|| anyhow!("too little colons"))?,
+            target: parts.next().map(PathBuf::from),
             permissions: parts.next().map(ToString::to_string),
         })
     }
