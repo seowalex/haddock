@@ -1,0 +1,12 @@
+warn = [
+  "clippy::pedantic",
+]
+
+allow = [
+  "clippy::enum_variant_names",
+  "clippy::large_enum_variant",
+  "clippy::needless-pass-by-value",
+  "clippy::struct-excessive-bools",
+  "clippy::too-many-lines",
+  "clippy::unnecessary-wraps",
+]
