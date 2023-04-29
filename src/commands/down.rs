@@ -28,7 +28,7 @@ pub(crate) struct Args {
     #[arg(short, long)]
     pub(crate) timeout: Option<u32>,
 
-    /// Remove named volumes declared in the `volumes` section of the Compose file and anonymous volumes attached to containers
+    /// Remove any anonymous volumes attached to containers
     #[arg(short, long)]
     pub(crate) volumes: bool,
 
