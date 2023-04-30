@@ -361,6 +361,10 @@ pub(crate) fn parse(config: &Config, no_interpolate: bool) -> Result<Compose> {
             bail!("Service \"{name}\" does not have an image specified");
         }
 
+        if service.network_mode.is_some() && service.networks.keys().any(|key| key != "default") {
+            bail!("Service \"{name}\" cannot have networks due to the network mode set");
+        }
+
         if service.network_mode.as_deref().unwrap_or_default() == "host"
             && !service.ports.is_empty()
         {

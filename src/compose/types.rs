@@ -79,6 +79,7 @@ pub(crate) struct Service {
     pub(crate) blkio_config: Option<BlkioConfig>,
     pub(crate) cap_add: Vec<String>,
     pub(crate) cap_drop: Vec<String>,
+    pub(crate) cgroup: Option<String>,
     pub(crate) cgroup_parent: Option<String>,
     #[serde_as(as = "PickFirst<(_, CommandOrString)>")]
     pub(crate) command: Vec<String>,
@@ -173,6 +174,7 @@ pub(crate) struct Service {
     pub(crate) ulimits: IndexMap<String, ResourceLimit>,
     pub(crate) user: Option<String>,
     pub(crate) userns_mode: Option<String>,
+    pub(crate) uts: Option<String>,
     #[serde_as(as = "SetLastValueWins<PickFirst<(_, ServiceVolumeOrString)>>")]
     pub(crate) volumes: IndexSet<ServiceVolume>,
     pub(crate) volumes_from: Vec<String>,
@@ -265,6 +267,10 @@ impl Service {
 
         for cap_drop in self.cap_drop.iter().cloned() {
             args.extend([String::from("--cap-drop"), cap_drop]);
+        }
+
+        if let Some(cgroup) = self.cgroup.as_ref().cloned() {
+            args.extend([String::from("--cgroupns"), cgroup]);
         }
 
         if let Some(cgroup_parent) = self.cgroup_parent.as_ref().cloned() {
@@ -592,6 +598,10 @@ impl Service {
 
         if let Some(userns_mode) = self.userns_mode.as_ref().cloned() {
             args.extend([String::from("--userns"), userns_mode]);
+        }
+
+        if let Some(uts) = self.uts.as_ref().cloned() {
+            args.extend([String::from("--uts"), uts]);
         }
 
         for volume in self.volumes_from.iter().cloned() {

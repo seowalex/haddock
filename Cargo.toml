@@ -9,7 +9,7 @@ keywords = ["podman", "compose", "docker", "docker-compose"]
 categories = ["command-line-utilities"]
 
 [dependencies]
-anyhow = "1.0.70"
+anyhow = "1.0.71"
 atty = "0.2.14"
 automod = "1.0.8"
 byte-unit = { version = "4.0.19", default-features = false, features = ["serde", "std"] }

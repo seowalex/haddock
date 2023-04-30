@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Update the `--volumes` flag description in the `down` command to properly reflect that it does not remove named volumes.
+- Add support for `cgroup` and `uts` in service definition.
+- Make `network_mode` and `networks` mutually exclusive attributes.
 
 ## [0.1.7] - 2023-03-31
 
