@@ -92,7 +92,7 @@ async fn run_container(
     args: Args,
 ) -> Result<()> {
     let project_name = file.name.as_ref().unwrap();
-    let rng = Rng::new();
+    let mut rng = Rng::new();
     let id = hex::encode(repeat_with(|| rng.u8(..)).take(6).collect::<Vec<_>>());
     let container_name = format!("{project_name}_{}_run_{id}", args.service);
 
