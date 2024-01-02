@@ -446,8 +446,6 @@ async fn create_containers(
                                                 project_name,
                                                 "--name",
                                                 &container_name,
-                                                "--network-alias",
-                                                service_name,
                                             ])
                                             .chain(requirements.iter().flat_map(|requirement| {
                                                 ["--requires", requirement]
@@ -470,6 +468,11 @@ async fn create_containers(
                                                     .iter()
                                                     .flat_map(|network| ["--network", network]),
                                             )
+                                            .chain(if service.networks.contains_key("default") {
+                                                vec!["--network-alias", service_name]
+                                            } else {
+                                                vec![]
+                                            })
                                             .chain(volumes.iter().map(AsRef::as_ref))
                                             .chain(
                                                 secrets

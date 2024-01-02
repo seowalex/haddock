@@ -201,8 +201,6 @@ async fn run_container(
                     project_name,
                     "--name",
                     &container_name,
-                    "--network-alias",
-                    &args.service,
                 ])
                 .chain(
                     requirements
@@ -216,6 +214,11 @@ async fn run_container(
                     vec![]
                 })
                 .chain(networks.iter().flat_map(|network| ["--network", network]))
+                .chain(if service.networks.contains_key("default") {
+                    vec!["--network-alias", &args.service]
+                } else {
+                    vec![]
+                })
                 .chain(volumes.iter().map(AsRef::as_ref))
                 .chain(secrets.iter().flat_map(|secret| ["--secret", secret]))
                 .chain(if args.detach {
